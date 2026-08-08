@@ -15,112 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/auth/login": {
-            "post": {
-                "description": "Authenticate user and get JWT token",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Login",
-                "operationId": "login",
-                "parameters": [
-                    {
-                        "description": "Login credentials",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.Login"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.Token"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/auth/register": {
-            "post": {
-                "description": "Register a new user",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Register",
-                "operationId": "register",
-                "parameters": [
-                    {
-                        "description": "Registration data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.Register"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/entity.User"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    }
-                }
-            }
-        },
         "/tasks": {
             "get": {
                 "security": [
@@ -174,13 +68,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -224,19 +118,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -277,25 +171,25 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -346,31 +240,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -403,19 +297,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -468,31 +362,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -538,19 +432,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -582,57 +476,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/profile": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get current user profile",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Get profile",
-                "operationId": "profile",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/entity.User"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -666,7 +516,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -710,7 +560,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -754,7 +604,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -791,7 +641,113 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/login": {
+            "post": {
+                "description": "Authenticate user and get JWT token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login",
+                "operationId": "login",
+                "parameters": [
+                    {
+                        "description": "Login credentials",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.Login"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Token"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/register": {
+            "post": {
+                "description": "Register a new user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Register",
+                "operationId": "register",
+                "parameters": [
+                    {
+                        "description": "Registration data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.Register"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/entity.User"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -880,7 +836,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -918,13 +874,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -969,13 +925,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1009,7 +965,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1043,7 +999,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1088,13 +1044,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1144,7 +1100,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1187,7 +1143,51 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/user/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get current user profile",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Get profile",
+                "operationId": "profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/entity.User"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1238,7 +1238,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1276,13 +1276,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                            "$ref": "#/definitions/v1.Error"
                         }
                     }
                 }
@@ -1429,15 +1429,6 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255,
                     "minLength": 3
-                }
-            }
-        },
-        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "string",
-                    "example": "internal server error"
                 }
             }
         },
@@ -1627,6 +1618,15 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255,
                     "example": "My task"
+                }
+            }
+        },
+        "v1.Error": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "message"
                 }
             }
         },
