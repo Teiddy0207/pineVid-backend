@@ -3,6 +3,7 @@ package video
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
@@ -10,20 +11,29 @@ import (
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/evrone/go-clean-template/internal/repo"
+	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/google/uuid"
 )
 
 type UseCase struct {
-	repo repo.VideoRepo
+	repo          repo.VideoRepo
+	natsPublisher *nats.Publisher
 }
 
-func New(r repo.VideoRepo) *UseCase {
-	return &UseCase{repo: r}
+func New(r repo.VideoRepo, natsPub *nats.Publisher) *UseCase {
+	return &UseCase{
+		repo:          r,
+		natsPublisher: natsPub,
+	}
 }
 
 func (u *UseCase) CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error) {
 	videoID := uuid.New().String()
-	s3Key := fmt.Sprintf("raw-uploads/%s/%s", videoID, req.FileName)
+	ext := filepath.Ext(req.FileName)
+	if ext == "" {
+		ext = ".mp4"
+	}
+	s3Key := fmt.Sprintf("raw-uploads/%s/raw%s", videoID, ext)
 
 	v := mapper.ToVideoEntity(userID, req, videoID, s3Key)
 	v.CreatedAt = time.Now().UTC()
@@ -33,8 +43,8 @@ func (u *UseCase) CreateUpload(ctx context.Context, userID string, req request.C
 		return response.UploadUrlResponse{}, fmt.Errorf("VideoUseCase - CreateUpload - Store: %w", err)
 	}
 
-	// Presigned S3 upload URL mock (In production, generate via minio/s3 SDK)
-	presignedUrl := fmt.Sprintf("https://s3.pipevid.com/upload/%s", s3Key)
+	// Presigned S3 upload URL for local MinIO S3 bucket raw-videos
+	presignedUrl := fmt.Sprintf("http://localhost:9000/raw-videos/%s", s3Key)
 
 	return response.UploadUrlResponse{
 		VideoID:   videoID,
@@ -56,7 +66,10 @@ func (u *UseCase) ConfirmUpload(ctx context.Context, userID string, req request.
 		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - ConfirmUpload - Update: %w", err)
 	}
 
-	// TODO: Publish NATS JetStream event 'video.transcode' for Transcode Worker
+	// Publish NATS JetStream event 'video.transcode' for Transcode Worker
+	if u.natsPublisher != nil {
+		_ = u.natsPublisher.PublishTranscodeJob(v.ID, v.RawS3Key, userID)
+	}
 
 	return mapper.ToVideoResponse(v), nil
 }

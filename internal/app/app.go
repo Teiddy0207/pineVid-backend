@@ -28,6 +28,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/usecase/user"
 	"github.com/evrone/go-clean-template/pkg/grpcserver"
 	"github.com/evrone/go-clean-template/pkg/httpserver"
+	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/evrone/go-clean-template/pkg/jwt"
 	"github.com/evrone/go-clean-template/pkg/logger"
 	natsRPCServer "github.com/evrone/go-clean-template/pkg/nats/nats_rpc/server"
@@ -59,7 +60,8 @@ func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager) useCases {
 	videoRepo := persistVideoRepo.New(pg)
 	livestreamRepo := persistLivestreamRepo.New(pg)
 
-	videoUc := videousecase.New(videoRepo)
+	natsPub, _ := nats.NewPublisher()
+	videoUc := videousecase.New(videoRepo, natsPub)
 	livestreamUc := livestreamusecase.New(livestreamRepo)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo)
 

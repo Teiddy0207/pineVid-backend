@@ -147,12 +147,31 @@ services:
           - nginx.lvh.me
 
 
+  minio:
+    container_name: minio
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin123"
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      app_network:
+        aliases:
+          - minio.lvh.me
+
 networks:
   app_network:
     external: false
-
 
 volumes:
   db_data:
   rabbitmq_data:
   nats_data:
+  minio_data:
+

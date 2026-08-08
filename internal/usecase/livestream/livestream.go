@@ -82,7 +82,7 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 	now := time.Now().UTC()
 	ls.IsLive = true
 	ls.StartedAt = &now
-	ls.HLSUrl = fmt.Sprintf("https://s3.pipevid.com/live/%s/master.m3u8", ls.StreamKey)
+	ls.HLSUrl = fmt.Sprintf("http://localhost:9000/hls-streams/live/%s/master.m3u8", ls.StreamKey)
 	ls.UpdatedAt = now
 
 	_ = u.repo.Update(ctx, &ls)
