@@ -45,6 +45,7 @@ type (
 		PublishVideo(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error)
 		DeleteVideo(ctx context.Context, userID, videoID string) error
+		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error
 	}
 
 	// Livestream -.

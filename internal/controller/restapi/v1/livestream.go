@@ -60,8 +60,8 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(resDTO)
 }
 
-// @Summary      Get RTMP Stream Key
-// @Description  Get stream key and RTMP server URL for OBS Studio
+// @Summary      Get streamer live stream key
+// @Description  Get or create the RTMP stream key for the authenticated streamer
 // @Tags         Studio
 // @Accept       json
 // @Produce      json
@@ -70,7 +70,7 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 // @Failure      500 {object} response.Error
 // @Router       /v1/studio/live/key [get]
 func (r *V1) getStreamKey(ctx *fiber.Ctx) error {
-	userID := "mock-user-123" // In production, extract from JWT context
+	userID := getUserID(ctx)
 
 	keyDTO, err := r.ls.GetStreamKey(ctx.UserContext(), userID)
 	if err != nil {
@@ -81,8 +81,8 @@ func (r *V1) getStreamKey(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(keyDTO)
 }
 
-// @Summary      Reset RTMP Stream Key
-// @Description  Generate a new stream key for OBS Studio
+// @Summary      Reset streamer live stream key
+// @Description  Generate a new RTMP stream key for the authenticated streamer
 // @Tags         Studio
 // @Accept       json
 // @Produce      json
@@ -91,7 +91,7 @@ func (r *V1) getStreamKey(ctx *fiber.Ctx) error {
 // @Failure      500 {object} response.Error
 // @Router       /v1/studio/live/reset-key [post]
 func (r *V1) resetStreamKey(ctx *fiber.Ctx) error {
-	userID := "mock-user-123"
+	userID := getUserID(ctx)
 
 	keyDTO, err := r.ls.ResetStreamKey(ctx.UserContext(), userID)
 	if err != nil {

@@ -153,3 +153,23 @@ func (u *UseCase) UpdateVideo(ctx context.Context, userID, videoID string, req r
 func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error {
 	return u.repo.Delete(ctx, videoID)
 }
+
+func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error {
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return fmt.Errorf("VideoUseCase - HandleTranscodeCallback - GetByID: %w", err)
+	}
+
+	if status == "complete" {
+		v.Status = entity.VideoStatusComplete
+		if hlsMasterURL != "" {
+			v.HLSUrl = hlsMasterURL
+		}
+	} else if status == "failed" {
+		v.Status = entity.VideoStatusFailed
+	}
+
+	v.UpdatedAt = time.Now().UTC()
+	return u.repo.Update(ctx, &v)
+}
+

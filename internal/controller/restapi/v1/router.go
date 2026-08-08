@@ -26,6 +26,8 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		videosPublicGroup.Get("/:id", r.getVideo)
 	}
 
+	apiV1Group.Post("/transcode/callback", r.transcodeCallback)
+
 	livePublicGroup := apiV1Group.Group("/live")
 	{
 		livePublicGroup.Get("/streams", r.listActiveStreams)

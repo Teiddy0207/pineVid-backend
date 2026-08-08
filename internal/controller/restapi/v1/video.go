@@ -10,6 +10,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+func getUserID(ctx *fiber.Ctx) string {
+	if userID, ok := ctx.Locals("userID").(string); ok && userID != "" {
+		return userID
+	}
+	return "mock-user-123"
+}
+
 // @Summary      List public videos
 // @Description  Get a paginated list of public videos with optional category filter
 // @Tags         Videos
@@ -78,7 +85,7 @@ func (r *V1) createVideoUpload(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
 	}
 
-	userID := "mock-user-123" // In production, extract from JWT context
+	userID := getUserID(ctx)
 
 	uploadDTO, err := r.vd.CreateUpload(ctx.UserContext(), userID, body)
 	if err != nil {
@@ -107,7 +114,7 @@ func (r *V1) confirmVideoUpload(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
 	}
 
-	userID := "mock-user-123"
+	userID := getUserID(ctx)
 
 	resDTO, err := r.vd.ConfirmUpload(ctx.UserContext(), userID, body)
 	if err != nil {
@@ -130,7 +137,7 @@ func (r *V1) confirmVideoUpload(ctx *fiber.Ctx) error {
 // @Failure      500 {object} response.Error
 // @Router       /v1/studio/videos [get]
 func (r *V1) listStudioVideos(ctx *fiber.Ctx) error {
-	userID := "mock-user-123"
+	userID := getUserID(ctx)
 	page := ctx.QueryInt("page", 1)
 	limit := ctx.QueryInt("limit", 10)
 
@@ -153,9 +160,29 @@ func (r *V1) listStudioVideos(ctx *fiber.Ctx) error {
 // @Success      200 {object} response.VideoResponse
 // @Failure      500 {object} response.Error
 // @Router       /v1/studio/videos/{id}/publish [post]
+func (r *V1) transcodeCallback(ctx *fiber.Ctx) error {
+	var body request.TranscodeCallback
+	if err := ctx.BodyParser(&body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, "invalid payload")
+	}
+
+	if err := r.v.Struct(body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+
+	if err := r.vd.HandleTranscodeCallback(ctx.UserContext(), body.VideoID, body.Status, body.HLSMasterURL); err != nil {
+		r.l.Error(err, "restapi - v1 - transcodeCallback")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to update transcode status")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(fiber.Map{
+		"message": "Transcode status updated successfully",
+	})
+}
+
 func (r *V1) publishVideo(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
-	userID := "mock-user-123"
+	userID := getUserID(ctx)
 
 	resDTO, err := r.vd.PublishVideo(ctx.UserContext(), userID, id)
 	if err != nil {

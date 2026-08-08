@@ -17,3 +17,11 @@ type UpdateVideo struct {
 type ConfirmUpload struct {
 	VideoID string `json:"video_id" validate:"required"`
 }
+
+type TranscodeCallback struct {
+	VideoID      string `json:"video_id" validate:"required"`
+	Status       string `json:"status" validate:"required,oneof=complete failed"`
+	HLSMasterURL string `json:"hls_master_url"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
