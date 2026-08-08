@@ -1,4 +1,3 @@
-basePath: /v1
 definitions:
   entity.Task:
     properties:
@@ -75,6 +74,158 @@ definitions:
         example: johndoe
         type: string
     type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.ConfirmUpload:
+    properties:
+      video_id:
+        type: string
+    required:
+    - video_id
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.CreateVideoUpload:
+    properties:
+      category:
+        type: string
+      description:
+        maxLength: 1000
+        type: string
+      file_name:
+        type: string
+      title:
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
+    - file_name
+    - title
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error:
+    properties:
+      error:
+        example: internal server error
+        type: string
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.LivestreamResponse:
+    properties:
+      category:
+        example: Science
+        type: string
+      ended_at:
+        type: string
+      hls_url:
+        example: https://s3.pipevid.com/live/streamkey/index.m3u8
+        type: string
+      id:
+        example: ls_550e8400
+        type: string
+      is_live:
+        example: true
+        type: boolean
+      started_at:
+        type: string
+      title:
+        example: Exploring the edge of the universe
+        type: string
+      user_id:
+        example: usr_12345
+        type: string
+      viewers_count:
+        example: 24812
+        type: integer
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.StreamKeyResponse:
+    properties:
+      server_url:
+        example: rtmp://live.pipevid.com/live
+        type: string
+      stream_key:
+        example: sk_live_8h2k_92md_71px
+        type: string
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.SystemDashboardResponse:
+    properties:
+      active_livestreams:
+        example: 12
+        type: integer
+      active_workers:
+        example: 4
+        type: integer
+      bandwidth_usage_gb:
+        example: 128.4
+        type: number
+      total_videos:
+        example: 1420
+        type: integer
+      total_viewers:
+        example: 35480
+        type: integer
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.UploadUrlResponse:
+    properties:
+      raw_s3_key:
+        type: string
+      upload_url:
+        type: string
+      video_id:
+        type: string
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse:
+    properties:
+      category:
+        example: Science
+        type: string
+      created_at:
+        type: string
+      description:
+        example: Join Luna Chen as she explores space.
+        type: string
+      duration:
+        example: "18:42"
+        type: string
+      hls_url:
+        example: https://s3.pipevid.com/hls/space/master.m3u8
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      status:
+        example: complete
+        type: string
+      thumbnail_url:
+        example: https://s3.pipevid.com/thumbnails/space.jpg
+        type: string
+      title:
+        example: Exploring the edge of the universe
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      views:
+        example: 24812
+        type: integer
+      visibility:
+        example: public
+        type: string
+    type: object
+  github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.WorkerStatusResponse:
+    properties:
+      cpu_usage:
+        example: 42.5
+        type: number
+      current_job:
+        example: job_vid_9421
+        type: string
+      ram_usage:
+        example: 68.1
+        type: number
+      status:
+        example: processing
+        type: string
+      worker_id:
+        example: worker-node-1
+        type: string
+    type: object
   v1.CreateTask:
     properties:
       description:
@@ -87,12 +238,6 @@ definitions:
         type: string
     required:
     - title
-    type: object
-  v1.Error:
-    properties:
-      error:
-        example: message
-        type: string
     type: object
   v1.Login:
     properties:
@@ -183,13 +328,8 @@ definitions:
     required:
     - title
     type: object
-host: localhost:8080
 info:
   contact: {}
-  description: Multi-domain clean architecture template with translation, user, and
-    task management
-  title: Go Clean Template API
-  version: "1.0"
 paths:
   /auth/login:
     post:
@@ -214,15 +354,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       summary: Login
       tags:
       - auth
@@ -249,15 +389,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       summary: Register
       tags:
       - auth
@@ -294,11 +434,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: List tasks
@@ -326,15 +466,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Create task
@@ -356,15 +496,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Delete task
@@ -389,19 +529,19 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Get task
@@ -434,23 +574,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Update task
@@ -485,23 +625,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Transition task status
@@ -530,15 +670,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Translate
@@ -558,11 +698,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Show history
@@ -582,23 +722,438 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.Error'
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
       security:
       - BearerAuth: []
       summary: Get profile
       tags:
       - user
-securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
-    type: apiKey
+  /v1/admin/dashboard:
+    get:
+      consumes:
+      - application/json
+      description: Get system overview statistics (Total Videos, Active Streams, Viewers,
+        Bandwidth)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.SystemDashboardResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Get Admin Dashboard Metrics
+      tags:
+      - Admin
+  /v1/admin/streams/{id}/ban:
+    post:
+      consumes:
+      - application/json
+      description: Instantly terminate and ban an active livestream
+      parameters:
+      - description: Livestream ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Ban active livestream
+      tags:
+      - Admin
+  /v1/admin/videos/{id}/ban:
+    post:
+      consumes:
+      - application/json
+      description: Remove or set video visibility to private due to terms violation
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Ban video
+      tags:
+      - Admin
+  /v1/admin/workers:
+    get:
+      consumes:
+      - application/json
+      description: Get real-time CPU, RAM, and current processing jobs of transcode
+        worker nodes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.WorkerStatusResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Get Transcode Workers Status
+      tags:
+      - Admin
+  /v1/live/auth:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Webhook used by SRS Media Server (on_publish) to validate stream
+        keys
+      parameters:
+      - description: Stream key
+        in: formData
+        name: name
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "403":
+          description: invalid stream key
+          schema:
+            type: string
+      summary: Authenticate RTMP Stream Key
+      tags:
+      - Livestream
+  /v1/live/streams:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of currently active livestreams
+      parameters:
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.LivestreamResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      summary: List active livestreams
+      tags:
+      - Livestream
+  /v1/live/streams/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a livestream
+      parameters:
+      - description: Livestream ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.LivestreamResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      summary: Get livestream by ID
+      tags:
+      - Livestream
+  /v1/studio/confirm-upload:
+    post:
+      consumes:
+      - application/json
+      description: Confirm that video file upload to S3 is complete and trigger transcode
+        worker
+      parameters:
+      - description: Confirm Upload Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.ConfirmUpload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Confirm raw video upload
+      tags:
+      - Studio
+  /v1/studio/live/key:
+    get:
+      consumes:
+      - application/json
+      description: Get stream key and RTMP server URL for OBS Studio
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.StreamKeyResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Get RTMP Stream Key
+      tags:
+      - Studio
+  /v1/studio/live/reset-key:
+    post:
+      consumes:
+      - application/json
+      description: Generate a new stream key for OBS Studio
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.StreamKeyResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Reset RTMP Stream Key
+      tags:
+      - Studio
+  /v1/studio/upload-url:
+    post:
+      consumes:
+      - application/json
+      description: Get a presigned S3 URL to upload raw video
+      parameters:
+      - description: Video Upload Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.CreateVideoUpload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.UploadUrlResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Request Presigned S3 Upload URL
+      tags:
+      - Studio
+  /v1/studio/videos:
+    get:
+      consumes:
+      - application/json
+      description: Get videos uploaded by the authenticated streamer
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: List studio videos
+      tags:
+      - Studio
+  /v1/studio/videos/{id}/publish:
+    post:
+      consumes:
+      - application/json
+      description: Set video visibility to public
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      security:
+      - BearerAuth: []
+      summary: Publish studio video
+      tags:
+      - Studio
+  /v1/videos:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of public videos with optional category filter
+      parameters:
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      summary: List public videos
+      tags:
+      - Videos
+  /v1/videos/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get video details by ID
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error'
+      summary: Get video by ID
+      tags:
+      - Videos
 swagger: "2.0"

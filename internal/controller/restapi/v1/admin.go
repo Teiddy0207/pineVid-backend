@@ -7,6 +7,15 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// @Summary      Get Admin Dashboard Metrics
+// @Description  Get system overview statistics (Total Videos, Active Streams, Viewers, Bandwidth)
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} response.SystemDashboardResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/admin/dashboard [get]
 func (r *V1) getAdminDashboard(ctx *fiber.Ctx) error {
 	dbDTO, err := r.ad.GetDashboard(ctx.UserContext())
 	if err != nil {
@@ -20,6 +29,15 @@ func (r *V1) getAdminDashboard(ctx *fiber.Ctx) error {
 	})
 }
 
+// @Summary      Get Transcode Workers Status
+// @Description  Get real-time CPU, RAM, and current processing jobs of transcode worker nodes
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {array} response.WorkerStatusResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/admin/workers [get]
 func (r *V1) getAdminWorkers(ctx *fiber.Ctx) error {
 	workers, err := r.ad.GetWorkersStatus(ctx.UserContext())
 	if err != nil {
@@ -33,6 +51,16 @@ func (r *V1) getAdminWorkers(ctx *fiber.Ctx) error {
 	})
 }
 
+// @Summary      Ban active livestream
+// @Description  Instantly terminate and ban an active livestream
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Livestream ID"
+// @Success      200 {object} map[string]interface{}
+// @Failure      500 {object} response.Error
+// @Router       /v1/admin/streams/{id}/ban [post]
 func (r *V1) banStream(ctx *fiber.Ctx) error {
 	streamID := ctx.Params("id")
 
@@ -47,6 +75,16 @@ func (r *V1) banStream(ctx *fiber.Ctx) error {
 	})
 }
 
+// @Summary      Ban video
+// @Description  Remove or set video visibility to private due to terms violation
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Success      200 {object} map[string]interface{}
+// @Failure      500 {object} response.Error
+// @Router       /v1/admin/videos/{id}/ban [post]
 func (r *V1) banVideo(ctx *fiber.Ctx) error {
 	videoID := ctx.Params("id")
 

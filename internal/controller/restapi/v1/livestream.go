@@ -5,10 +5,22 @@ import (
 	"net/http"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
+	_ "github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/gofiber/fiber/v2"
 )
 
+// @Summary      List active livestreams
+// @Description  Get a paginated list of currently active livestreams
+// @Tags         Livestream
+// @Accept       json
+// @Produce      json
+// @Param        category query string false "Filter by category"
+// @Param        page query int false "Page number" default(1)
+// @Param        limit query int false "Page limit" default(10)
+// @Success      200 {object} response.LivestreamResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/live/streams [get]
 func (r *V1) listActiveStreams(ctx *fiber.Ctx) error {
 	category := ctx.Query("category")
 	page := ctx.QueryInt("page", 1)
@@ -23,6 +35,16 @@ func (r *V1) listActiveStreams(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(pageDTO)
 }
 
+// @Summary      Get livestream by ID
+// @Description  Get details of a livestream
+// @Tags         Livestream
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "Livestream ID"
+// @Success      200 {object} response.LivestreamResponse
+// @Failure      404 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/live/streams/{id} [get]
 func (r *V1) getStream(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
 
@@ -38,6 +60,15 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(resDTO)
 }
 
+// @Summary      Get RTMP Stream Key
+// @Description  Get stream key and RTMP server URL for OBS Studio
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} response.StreamKeyResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/live/key [get]
 func (r *V1) getStreamKey(ctx *fiber.Ctx) error {
 	userID := "mock-user-123" // In production, extract from JWT context
 
@@ -50,6 +81,15 @@ func (r *V1) getStreamKey(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(keyDTO)
 }
 
+// @Summary      Reset RTMP Stream Key
+// @Description  Generate a new stream key for OBS Studio
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} response.StreamKeyResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/live/reset-key [post]
 func (r *V1) resetStreamKey(ctx *fiber.Ctx) error {
 	userID := "mock-user-123"
 
@@ -62,10 +102,18 @@ func (r *V1) resetStreamKey(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(keyDTO)
 }
 
+// @Summary      Authenticate RTMP Stream Key
+// @Description  Webhook used by SRS Media Server (on_publish) to validate stream keys
+// @Tags         Livestream
+// @Accept       x-www-form-urlencoded
+// @Produce      plain
+// @Param        name formData string true "Stream key"
+// @Success      200 {string} string "OK"
+// @Failure      403 {string} string "invalid stream key"
+// @Router       /v1/live/auth [post]
 func (r *V1) authenticateRTMPStreamKey(ctx *fiber.Ctx) error {
 	var body request.StreamKeyAuth
 	if err := ctx.BodyParser(&body); err != nil {
-		// SRS sends form-data body
 		body.StreamKey = ctx.FormValue("name")
 	}
 

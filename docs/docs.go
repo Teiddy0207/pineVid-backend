@@ -50,19 +50,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
                 }
@@ -103,19 +103,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
                 }
@@ -123,6 +123,11 @@ const docTemplate = `{
         },
         "/tasks": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "List tasks for the current user with optional filtering",
                 "produces": [
                     "application/json"
@@ -169,23 +174,23 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Create a new task for the current user",
                 "consumes": [
                     "application/json"
@@ -219,31 +224,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/tasks/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Get a task by ID",
                 "produces": [
                     "application/json"
@@ -272,35 +277,35 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "description": "Update task title and description",
                 "consumes": [
                     "application/json"
@@ -341,41 +346,41 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Delete a task by ID",
                 "tags": [
                     "tasks"
@@ -398,31 +403,31 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/tasks/{id}/status": {
             "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Change task status (todo -\u003e in_progress -\u003e done, or in_progress -\u003e todo)",
                 "consumes": [
                     "application/json"
@@ -463,43 +468,43 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/translation/do-translate": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Translate a text",
                 "consumes": [
                     "application/json"
@@ -533,31 +538,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/translation/history": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Show all translation history for current user",
                 "produces": [
                     "application/json"
@@ -577,25 +582,25 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/user/profile": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Get current user profile",
                 "produces": [
                     "application/json"
@@ -615,27 +620,672 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/v1.Error"
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
                         }
                     }
-                },
+                }
+            }
+        },
+        "/v1/admin/dashboard": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
+                ],
+                "description": "Get system overview statistics (Total Videos, Active Streams, Viewers, Bandwidth)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get Admin Dashboard Metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.SystemDashboardResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/admin/streams/{id}/ban": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Instantly terminate and ban an active livestream",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Ban active livestream",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Livestream ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/admin/videos/{id}/ban": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Remove or set video visibility to private due to terms violation",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Ban video",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/admin/workers": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get real-time CPU, RAM, and current processing jobs of transcode worker nodes",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get Transcode Workers Status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.WorkerStatusResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/live/auth": {
+            "post": {
+                "description": "Webhook used by SRS Media Server (on_publish) to validate stream keys",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Livestream"
+                ],
+                "summary": "Authenticate RTMP Stream Key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stream key",
+                        "name": "name",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "invalid stream key",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/live/streams": {
+            "get": {
+                "description": "Get a paginated list of currently active livestreams",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Livestream"
+                ],
+                "summary": "List active livestreams",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.LivestreamResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/live/streams/{id}": {
+            "get": {
+                "description": "Get details of a livestream",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Livestream"
+                ],
+                "summary": "Get livestream by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Livestream ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.LivestreamResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/studio/confirm-upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Confirm that video file upload to S3 is complete and trigger transcode worker",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Studio"
+                ],
+                "summary": "Confirm raw video upload",
+                "parameters": [
+                    {
+                        "description": "Confirm Upload Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.ConfirmUpload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/studio/live/key": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get stream key and RTMP server URL for OBS Studio",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Studio"
+                ],
+                "summary": "Get RTMP Stream Key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.StreamKeyResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/studio/live/reset-key": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generate a new stream key for OBS Studio",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Studio"
+                ],
+                "summary": "Reset RTMP Stream Key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.StreamKeyResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/studio/upload-url": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a presigned S3 URL to upload raw video",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Studio"
+                ],
+                "summary": "Request Presigned S3 Upload URL",
+                "parameters": [
+                    {
+                        "description": "Video Upload Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.CreateVideoUpload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.UploadUrlResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/studio/videos": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get videos uploaded by the authenticated streamer",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Studio"
+                ],
+                "summary": "List studio videos",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/studio/videos/{id}/publish": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Set video visibility to public",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Studio"
+                ],
+                "summary": "Publish studio video",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/videos": {
+            "get": {
+                "description": "Get a paginated list of public videos with optional category filter",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Videos"
+                ],
+                "summary": "List public videos",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/videos/{id}": {
+            "get": {
+                "description": "Get video details by ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Videos"
+                ],
+                "summary": "Get video by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error"
+                        }
+                    }
+                }
             }
         }
     },
@@ -747,6 +1397,221 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.ConfirmUpload": {
+            "type": "object",
+            "required": [
+                "video_id"
+            ],
+            "properties": {
+                "video_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_request.CreateVideoUpload": {
+            "type": "object",
+            "required": [
+                "file_name",
+                "title"
+            ],
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "file_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 3
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.Error": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "internal server error"
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.LivestreamResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "example": "Science"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "hls_url": {
+                    "type": "string",
+                    "example": "https://s3.pipevid.com/live/streamkey/index.m3u8"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "ls_550e8400"
+                },
+                "is_live": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Exploring the edge of the universe"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "usr_12345"
+                },
+                "viewers_count": {
+                    "type": "integer",
+                    "example": 24812
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.StreamKeyResponse": {
+            "type": "object",
+            "properties": {
+                "server_url": {
+                    "type": "string",
+                    "example": "rtmp://live.pipevid.com/live"
+                },
+                "stream_key": {
+                    "type": "string",
+                    "example": "sk_live_8h2k_92md_71px"
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.SystemDashboardResponse": {
+            "type": "object",
+            "properties": {
+                "active_livestreams": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "active_workers": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "bandwidth_usage_gb": {
+                    "type": "number",
+                    "example": 128.4
+                },
+                "total_videos": {
+                    "type": "integer",
+                    "example": 1420
+                },
+                "total_viewers": {
+                    "type": "integer",
+                    "example": 35480
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.UploadUrlResponse": {
+            "type": "object",
+            "properties": {
+                "raw_s3_key": {
+                    "type": "string"
+                },
+                "upload_url": {
+                    "type": "string"
+                },
+                "video_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.VideoResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "example": "Science"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Join Luna Chen as she explores space."
+                },
+                "duration": {
+                    "type": "string",
+                    "example": "18:42"
+                },
+                "hls_url": {
+                    "type": "string",
+                    "example": "https://s3.pipevid.com/hls/space/master.m3u8"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "complete"
+                },
+                "thumbnail_url": {
+                    "type": "string",
+                    "example": "https://s3.pipevid.com/thumbnails/space.jpg"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Exploring the edge of the universe"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "views": {
+                    "type": "integer",
+                    "example": 24812
+                },
+                "visibility": {
+                    "type": "string",
+                    "example": "public"
+                }
+            }
+        },
+        "github_com_evrone_go-clean-template_internal_controller_restapi_v1_response.WorkerStatusResponse": {
+            "type": "object",
+            "properties": {
+                "cpu_usage": {
+                    "type": "number",
+                    "example": 42.5
+                },
+                "current_job": {
+                    "type": "string",
+                    "example": "job_vid_9421"
+                },
+                "ram_usage": {
+                    "type": "number",
+                    "example": 68.1
+                },
+                "status": {
+                    "type": "string",
+                    "example": "processing"
+                },
+                "worker_id": {
+                    "type": "string",
+                    "example": "worker-node-1"
+                }
+            }
+        },
         "v1.CreateTask": {
             "type": "object",
             "required": [
@@ -762,15 +1627,6 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255,
                     "example": "My task"
-                }
-            }
-        },
-        "v1.Error": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "string",
-                    "example": "message"
                 }
             }
         },
@@ -901,24 +1757,17 @@ const docTemplate = `{
                 }
             }
         }
-    },
-    "securityDefinitions": {
-        "BearerAuth": {
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
-        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
-	Host:             "localhost:8080",
-	BasePath:         "/v1",
+	Version:          "",
+	Host:             "",
+	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Go Clean Template API",
-	Description:      "Multi-domain clean architecture template with translation, user, and task management",
+	Title:            "",
+	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

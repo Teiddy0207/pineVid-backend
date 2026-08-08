@@ -252,6 +252,7 @@ require (
 	github.com/jgautheron/goconst v1.10.0 // indirect
 	github.com/jjti/go-spancheck v0.6.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/julz/importas v0.2.0 // indirect
 	github.com/k0kubun/pp v2.3.0+incompatible // indirect
 	github.com/karamaru-alpha/copyloopvar v1.2.2 // indirect

@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/evrone/go-clean-template/config"
-	amqprpc "github.com/evrone/go-clean-template/internal/controller/amqp_rpc"
 	"github.com/evrone/go-clean-template/internal/controller/grpc"
 	grpcmw "github.com/evrone/go-clean-template/internal/controller/grpc/middleware"
 	natsrpc "github.com/evrone/go-clean-template/internal/controller/nats_rpc"
@@ -33,7 +32,6 @@ import (
 	"github.com/evrone/go-clean-template/pkg/logger"
 	natsRPCServer "github.com/evrone/go-clean-template/pkg/nats/nats_rpc/server"
 	"github.com/evrone/go-clean-template/pkg/postgres"
-	rmqRPCServer "github.com/evrone/go-clean-template/pkg/rabbitmq/rmq_rpc/server"
 	"github.com/evrone/go-clean-template/pkg/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	pbgrpc "google.golang.org/grpc"
@@ -49,7 +47,6 @@ type useCases struct {
 }
 
 type servers struct {
-	rmq  *rmqRPCServer.Server
 	nats *natsRPCServer.Server
 	grpc *grpcserver.Server
 	http *httpserver.Server
@@ -77,20 +74,15 @@ func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager) useCases {
 }
 
 func initServers(cfg *config.Config, uc useCases, jwtManager *jwt.Manager, l logger.Interface) servers {
-	// RabbitMQ RPC Server
-	rmqRouter := amqprpc.NewRouter(uc.translation, uc.user, uc.task, jwtManager, l)
-
-	rmqServer, err := rmqRPCServer.New(cfg.RMQ.URL, cfg.RMQ.ServerExchange, rmqRouter, l)
-	if err != nil {
-		l.Fatal(fmt.Errorf("app - Run - rmqServer - server.New: %w", err))
-	}
-
 	// NATS RPC Server
-	natsRouter := natsrpc.NewRouter(uc.translation, uc.user, uc.task, jwtManager, l)
-
-	natsServer, err := natsRPCServer.New(cfg.NATS.URL, cfg.NATS.ServerExchange, natsRouter, l)
-	if err != nil {
-		l.Fatal(fmt.Errorf("app - Run - natsServer - server.New: %w", err))
+	var natsServer *natsRPCServer.Server
+	var err error
+	if cfg.NATS.URL != "" {
+		natsRouter := natsrpc.NewRouter(uc.translation, uc.user, uc.task, jwtManager, l)
+		natsServer, err = natsRPCServer.New(cfg.NATS.URL, cfg.NATS.ServerExchange, natsRouter, l)
+		if err != nil {
+			l.Error(fmt.Errorf("app - Run - natsServer: %w", err))
+		}
 	}
 
 	// gRPC Server
@@ -109,7 +101,6 @@ func initServers(cfg *config.Config, uc useCases, jwtManager *jwt.Manager, l log
 	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, jwtManager, l)
 
 	return servers{
-		rmq:  rmqServer,
 		nats: natsServer,
 		grpc: grpcServer,
 		http: httpServer,
@@ -117,8 +108,9 @@ func initServers(cfg *config.Config, uc useCases, jwtManager *jwt.Manager, l log
 }
 
 func (s *servers) startServers() {
-	s.rmq.Start()
-	s.nats.Start()
+	if s.nats != nil {
+		s.nats.Start()
+	}
 	s.grpc.Start()
 	s.http.Start()
 }
@@ -136,10 +128,6 @@ func (s *servers) waitForShutdown(l logger.Interface) {
 		l.Error(fmt.Errorf("app - Run - httpServer.Notify: %w", err))
 	case err = <-s.grpc.Notify():
 		l.Error(fmt.Errorf("app - Run - grpcServer.Notify: %w", err))
-	case err = <-s.rmq.Notify():
-		l.Error(fmt.Errorf("app - Run - rmqServer.Notify: %w", err))
-	case err = <-s.nats.Notify():
-		l.Error(fmt.Errorf("app - Run - natsServer.Notify: %w", err))
 	}
 
 	s.shutdownServers(l)
@@ -154,12 +142,10 @@ func (s *servers) shutdownServers(l logger.Interface) {
 		l.Error(fmt.Errorf("app - Run - grpcServer.Shutdown: %w", err))
 	}
 
-	if err := s.rmq.Shutdown(); err != nil {
-		l.Error(fmt.Errorf("app - Run - rmqServer.Shutdown: %w", err))
-	}
-
-	if err := s.nats.Shutdown(); err != nil {
-		l.Error(fmt.Errorf("app - Run - natsServer.Shutdown: %w", err))
+	if s.nats != nil {
+		if err := s.nats.Shutdown(); err != nil {
+			l.Error(fmt.Errorf("app - Run - natsServer.Shutdown: %w", err))
+		}
 	}
 }
 
