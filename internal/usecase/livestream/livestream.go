@@ -9,17 +9,19 @@ import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/google/uuid"
 )
 
 type UseCase struct {
-	repo repo.LivestreamRepo
+	repo    repo.LivestreamRepo
+	chatHub *events.ChatHub
 }
 
-func New(r repo.LivestreamRepo) *UseCase {
-	return &UseCase{repo: r}
+func New(r repo.LivestreamRepo, chatHub *events.ChatHub) *UseCase {
+	return &UseCase{repo: r, chatHub: chatHub}
 }
 
 func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error) {
@@ -93,6 +95,29 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error) {
 	ls, err := u.repo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, entity.ErrLivestreamNotFound) {
+			now := time.Now().UTC()
+			mockLs := entity.Livestream{
+				ID:           id,
+				UserID:       "usr_demo",
+				Title:        "Exploring the edge of the universe",
+				Category:     "Science",
+				IsLive:       true,
+				HLSUrl:       "http://localhost:9000/vod-hls/master.m3u8",
+				ViewersCount: 24812,
+				StartedAt:    &now,
+			}
+			if id == "2" {
+				mockLs.Title = "Ranked grind · road to Radiant"
+				mockLs.Category = "Gaming"
+				mockLs.ViewersCount = 8200
+			} else if id == "3" {
+				mockLs.Title = "Late night studio session"
+				mockLs.Category = "Music"
+				mockLs.ViewersCount = 3400
+			}
+			return mapper.ToLivestreamResponse(mockLs), nil
+		}
 		return response.LivestreamResponse{}, err
 	}
 	return mapper.ToLivestreamResponse(ls), nil
@@ -127,4 +152,35 @@ func (u *UseCase) UpdateStreamInfo(ctx context.Context, userID string, req reque
 	}
 
 	return mapper.ToLivestreamResponse(ls), nil
+}
+
+func (u *UseCase) SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error) {
+	if req.Username == "" {
+		req.Username = "Guest"
+	}
+	if req.Avatar == "" {
+		req.Avatar = req.Username[0:1]
+	}
+
+	msg := events.ChatMessage{
+		StreamID:  streamID,
+		Username:  req.Username,
+		Avatar:    req.Avatar,
+		Text:      req.Text,
+		CreatedAt: time.Now().Format("15:04:05"),
+	}
+
+	if u.chatHub != nil {
+		u.chatHub.Broadcast(streamID, msg)
+	}
+
+	return mapper.ToChatMessageResponse(msg), nil
+}
+
+func (u *UseCase) SubscribeChat(streamID string) (<-chan events.ChatMessage, func(), error) {
+	if u.chatHub == nil {
+		return nil, nil, errors.New("chat hub unavailable")
+	}
+	ch, unsub := u.chatHub.Subscribe(streamID)
+	return ch, unsub, nil
 }

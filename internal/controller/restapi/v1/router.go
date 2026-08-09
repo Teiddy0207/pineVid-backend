@@ -11,8 +11,8 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, hub *events.Hub, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, hub: hub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
@@ -29,11 +29,13 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 
 	apiV1Group.Post("/transcode/callback", r.transcodeCallback)
 	apiV1Group.Get("/events/videos", r.sseVideoEvents)
+	apiV1Group.Get("/events/chat/:id", r.sseChatEvents)
 
 	livePublicGroup := apiV1Group.Group("/live")
 	{
 		livePublicGroup.Get("/streams", r.listActiveStreams)
 		livePublicGroup.Get("/streams/:id", r.getStream)
+		livePublicGroup.Post("/streams/:id/chat", r.sendChatMessage)
 		livePublicGroup.Post("/auth", r.authenticateRTMPStreamKey) // Internal Webhook for SRS
 	}
 

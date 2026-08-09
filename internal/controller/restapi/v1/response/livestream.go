@@ -18,3 +18,11 @@ type StreamKeyResponse struct {
 	ServerUrl string `json:"server_url" example:"rtmp://live.pipevid.com/live"`
 	StreamKey string `json:"stream_key" example:"sk_live_8h2k_92md_71px"`
 }
+
+type ChatMessageResponse struct {
+	StreamID  string `json:"stream_id" example:"ls_550e8400"`
+	Username  string `json:"username" example:"julesm"`
+	Avatar    string `json:"avatar" example:"JM"`
+	Text      string `json:"text" example:"This stream is amazing!"`
+	CreatedAt string `json:"created_at" example:"14:32:05"`
+}

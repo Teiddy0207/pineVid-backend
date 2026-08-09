@@ -9,13 +9,14 @@ import (
 
 // V1 -.
 type V1 struct {
-	t   usecase.Translation
-	u   usecase.User
-	tk  usecase.Task
-	vd  usecase.Video
-	ls  usecase.Livestream
-	ad  usecase.Admin
-	hub *events.Hub
-	l   logger.Interface
-	v   *validator.Validate
+	t       usecase.Translation
+	u       usecase.User
+	tk      usecase.Task
+	vd      usecase.Video
+	ls      usecase.Livestream
+	ad      usecase.Admin
+	hub     *events.Hub
+	chatHub *events.ChatHub
+	l       logger.Interface
+	v       *validator.Validate
 }

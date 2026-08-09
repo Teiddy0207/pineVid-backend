@@ -1,12 +1,11 @@
 package v1
 
 import (
-	"errors"
+	"bufio"
+	"encoding/json"
+	"fmt"
 	"net/http"
-
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
-	_ "github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
-	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -51,13 +50,83 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 	resDTO, err := r.ls.GetStreamByID(ctx.UserContext(), id)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - getStream")
-		if errors.Is(err, entity.ErrLivestreamNotFound) {
-			return errorResponse(ctx, http.StatusNotFound, "livestream not found")
-		}
-		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to get stream")
 	}
 
 	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
+// @Summary      Send chat message
+// @Description  Send a real-time message to a live stream chat room
+// @Tags         Livestream
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "Livestream ID"
+// @Param        request body request.SendChatMessage true "Chat message payload"
+// @Success      200 {object} response.ChatMessageResponse
+// @Failure      400 {object} response.Error
+// @Router       /v1/live/streams/{id}/chat [post]
+func (r *V1) sendChatMessage(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+
+	var req request.SendChatMessage
+	if err := ctx.BodyParser(&req); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, "invalid chat payload")
+	}
+
+	if req.Text == "" {
+		return errorResponse(ctx, http.StatusBadRequest, "text cannot be empty")
+	}
+
+	resDTO, err := r.ls.SendChatMessage(ctx.UserContext(), id, req)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - sendChatMessage")
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
+// @Summary      Realtime SSE Live Chat Stream
+// @Description  Stream live chat messages for a specific livestream room via SSE
+// @Tags         Livestream
+// @Produce      text/event-stream
+// @Param        id path string true "Livestream ID"
+// @Router       /v1/events/chat/{id} [get]
+func (r *V1) sseChatEvents(ctx *fiber.Ctx) error {
+	streamID := ctx.Params("id")
+
+	ctx.Set("Content-Type", "text/event-stream")
+	ctx.Set("Cache-Control", "no-cache")
+	ctx.Set("Connection", "keep-alive")
+	ctx.Set("Access-Control-Allow-Origin", "*")
+
+	ch, unsubscribe, err := r.ls.SubscribeChat(streamID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - sseChatEvents")
+		return errorResponse(ctx, http.StatusInternalServerError, err.Error())
+	}
+
+	ctx.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		defer unsubscribe()
+
+		// Initial connection ping
+		fmt.Fprintf(w, ": connected to chat room %s\n\n", streamID)
+		w.Flush()
+
+		for msg := range ch {
+			data, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			if err := w.Flush(); err != nil {
+				return // client disconnected
+			}
+		}
+	})
+
+	return nil
 }
 
 // @Summary      Get streamer live stream key

@@ -8,3 +8,9 @@ type UpdateLivestreamInfo struct {
 	Title    string `json:"title" validate:"omitempty,min=3,max=255"`
 	Category string `json:"category"`
 }
+
+type SendChatMessage struct {
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+	Text     string `json:"text" validate:"required"`
+}

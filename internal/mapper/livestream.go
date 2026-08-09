@@ -3,6 +3,7 @@ package mapper
 import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/evrone/go-clean-template/internal/events"
 )
 
 func ToLivestreamResponse(ls entity.Livestream) response.LivestreamResponse {
@@ -42,5 +43,15 @@ func ToLivestreamPageResponse(streams []entity.Livestream, totalItems, page, lim
 			CurrentPage: page,
 			Limit:       limit,
 		},
+	}
+}
+
+func ToChatMessageResponse(msg events.ChatMessage) response.ChatMessageResponse {
+	return response.ChatMessageResponse{
+		StreamID:  msg.StreamID,
+		Username:  msg.Username,
+		Avatar:    msg.Avatar,
+		Text:      msg.Text,
+		CreatedAt: msg.CreatedAt,
 	}
 }

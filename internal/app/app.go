@@ -54,7 +54,7 @@ type servers struct {
 	http *httpserver.Server
 }
 
-func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager) useCases {
+func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager, chatHub *events.ChatHub) useCases {
 	translationRepo := persistTranslationRepo.New(pg)
 	taskRepo := persistTaskRepo.New(pg)
 	userRepo := persistUserRepo.New(pg)
@@ -63,7 +63,7 @@ func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager) useCases {
 
 	natsPub, _ := nats.NewPublisher()
 	videoUc := videousecase.New(videoRepo, natsPub)
-	livestreamUc := livestreamusecase.New(livestreamRepo)
+	livestreamUc := livestreamusecase.New(livestreamRepo, chatHub)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo)
 
 	return useCases{
@@ -76,7 +76,7 @@ func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager) useCases {
 	}
 }
 
-func initServers(cfg *config.Config, uc useCases, jwtManager *jwt.Manager, l logger.Interface) servers {
+func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) servers {
 	// NATS RPC Server
 	var natsServer *natsRPCServer.Server
 	var err error
@@ -102,7 +102,7 @@ func initServers(cfg *config.Config, uc useCases, jwtManager *jwt.Manager, l log
 	// HTTP Server
 	videoEventHub := events.NewHub()
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
-	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, videoEventHub, jwtManager, l)
+	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, videoEventHub, chatHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,
@@ -187,8 +187,9 @@ func Run(cfg *config.Config) {
 	// JWT
 	jwtManager := jwt.New(cfg.JWT.Secret, cfg.JWT.TokenExpiry)
 
-	uc := initUseCases(pg, jwtManager)
-	s := initServers(cfg, uc, jwtManager, l)
+	chatHub := events.NewChatHub()
+	uc := initUseCases(pg, jwtManager, chatHub)
+	s := initServers(cfg, uc, chatHub, jwtManager, l)
 	s.startServers()
 	s.waitForShutdown(l)
 }
