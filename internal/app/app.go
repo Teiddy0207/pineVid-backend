@@ -13,6 +13,7 @@ import (
 	grpcmw "github.com/evrone/go-clean-template/internal/controller/grpc/middleware"
 	natsrpc "github.com/evrone/go-clean-template/internal/controller/nats_rpc"
 	"github.com/evrone/go-clean-template/internal/controller/restapi"
+	"github.com/evrone/go-clean-template/internal/events"
 	adminusecase "github.com/evrone/go-clean-template/internal/usecase/admin"
 	livestreamusecase "github.com/evrone/go-clean-template/internal/usecase/livestream"
 	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
@@ -99,8 +100,9 @@ func initServers(cfg *config.Config, uc useCases, jwtManager *jwt.Manager, l log
 	grpc.NewRouter(grpcServer.App, uc.translation, uc.user, uc.task, l)
 
 	// HTTP Server
+	videoEventHub := events.NewHub()
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
-	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, jwtManager, l)
+	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, videoEventHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,

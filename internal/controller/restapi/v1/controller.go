@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/evrone/go-clean-template/internal/usecase"
 	"github.com/evrone/go-clean-template/pkg/logger"
 	"github.com/go-playground/validator/v10"
@@ -8,12 +9,13 @@ import (
 
 // V1 -.
 type V1 struct {
-	t  usecase.Translation
-	u  usecase.User
-	tk usecase.Task
-	vd usecase.Video
-	ls usecase.Livestream
-	ad usecase.Admin
-	l  logger.Interface
-	v  *validator.Validate
+	t   usecase.Translation
+	u   usecase.User
+	tk  usecase.Task
+	vd  usecase.Video
+	ls  usecase.Livestream
+	ad  usecase.Admin
+	hub *events.Hub
+	l   logger.Interface
+	v   *validator.Validate
 }

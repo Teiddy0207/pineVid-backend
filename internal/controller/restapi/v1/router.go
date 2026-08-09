@@ -2,6 +2,7 @@ package v1
 
 import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi/middleware"
+	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/evrone/go-clean-template/internal/usecase"
 	"github.com/evrone/go-clean-template/pkg/jwt"
 	"github.com/evrone/go-clean-template/pkg/logger"
@@ -10,8 +11,8 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, hub *events.Hub, jwtManager *jwt.Manager, l logger.Interface) {
+	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, hub: hub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
@@ -27,6 +28,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	}
 
 	apiV1Group.Post("/transcode/callback", r.transcodeCallback)
+	apiV1Group.Get("/events/videos", r.sseVideoEvents)
 
 	livePublicGroup := apiV1Group.Group("/live")
 	{

@@ -1,13 +1,18 @@
 package v1
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	_ "github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp"
 )
 
 func getUserID(ctx *fiber.Ctx) string {
@@ -175,9 +180,39 @@ func (r *V1) transcodeCallback(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to update transcode status")
 	}
 
+	// Broadcast SSE event to all connected clients
+	if r.hub != nil {
+		r.hub.Broadcast(events.VideoEvent{
+			VideoID: body.VideoID,
+			Status:  body.Status,
+			HLSUrl:  body.HLSMasterURL,
+		})
+	}
+
 	return ctx.Status(http.StatusOK).JSON(fiber.Map{
 		"message": "Transcode status updated successfully",
 	})
+}
+
+// sseVideoEvents streams real-time video status updates to the frontend via Server-Sent Events
+func (r *V1) sseVideoEvents(ctx *fiber.Ctx) error {
+	ctx.Set("Content-Type", "text/event-stream")
+	ctx.Set("Cache-Control", "no-cache")
+	ctx.Set("Connection", "keep-alive")
+	ctx.Set("Access-Control-Allow-Origin", "*")
+
+	ctx.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+		ch, unsub := r.hub.Subscribe()
+		defer unsub()
+
+		for ev := range ch {
+			data, _ := json.Marshal(ev)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			_ = w.Flush()
+		}
+	}))
+
+	return nil
 }
 
 func (r *V1) publishVideo(ctx *fiber.Ctx) error {
