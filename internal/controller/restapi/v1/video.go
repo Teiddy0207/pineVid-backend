@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	_ "github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/gofiber/fiber/v2"
-	"github.com/valyala/fasthttp"
 )
 
 func getUserID(ctx *fiber.Ctx) string {
@@ -196,21 +196,45 @@ func (r *V1) transcodeCallback(ctx *fiber.Ctx) error {
 
 // sseVideoEvents streams real-time video status updates to the frontend via Server-Sent Events
 func (r *V1) sseVideoEvents(ctx *fiber.Ctx) error {
-	ctx.Set("Content-Type", "text/event-stream")
-	ctx.Set("Cache-Control", "no-cache")
-	ctx.Set("Connection", "keep-alive")
-	ctx.Set("Access-Control-Allow-Origin", "*")
+	ctx.Context().Response.Header.Set("Access-Control-Allow-Origin", "*")
+	ctx.Context().Response.Header.Set("Access-Control-Allow-Headers", "*")
+	ctx.Context().Response.Header.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	ctx.Context().Response.Header.Set("Content-Type", "text/event-stream")
+	ctx.Context().Response.Header.Set("Cache-Control", "no-cache")
+	ctx.Context().Response.Header.Set("Connection", "keep-alive")
 
-	ctx.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+	ctx.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		ch, unsub := r.hub.Subscribe()
 		defer unsub()
 
-		for ev := range ch {
-			data, _ := json.Marshal(ev)
-			fmt.Fprintf(w, "data: %s\n\n", data)
-			_ = w.Flush()
+		// Immediate heartbeat to flush 200 OK headers to browser EventSource
+		fmt.Fprintf(w, ": connected\n\n")
+		if err := w.Flush(); err != nil {
+			return
 		}
-	}))
+
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
+				data, _ := json.Marshal(ev)
+				fmt.Fprintf(w, "data: %s\n\n", data)
+				if err := w.Flush(); err != nil {
+					return
+				}
+			case <-ticker.C:
+				fmt.Fprintf(w, ": ping\n\n")
+				if err := w.Flush(); err != nil {
+					return
+				}
+			}
+		}
+	})
 
 	return nil
 }

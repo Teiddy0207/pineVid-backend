@@ -26,6 +26,10 @@ func buildRequestMessage(ctx *fiber.Ctx) string {
 
 func Logger(l logger.Interface) func(c *fiber.Ctx) error {
 	return func(ctx *fiber.Ctx) error {
+		if strings.Contains(ctx.Path(), "/events/") {
+			return ctx.Next()
+		}
+
 		err := ctx.Next()
 
 		l.Info("%s", buildRequestMessage(ctx))
