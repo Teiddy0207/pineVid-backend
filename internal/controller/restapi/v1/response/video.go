@@ -23,3 +23,9 @@ type UploadUrlResponse struct {
 	UploadUrl string `json:"upload_url"`
 	RawS3Key  string `json:"raw_s3_key"`
 }
+
+type RecordViewResponse struct {
+	VideoID    string `json:"video_id"`
+	Recorded   bool   `json:"recorded"`
+	TotalViews int64  `json:"total_views"`
+}

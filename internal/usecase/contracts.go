@@ -47,6 +47,7 @@ type (
 		UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error)
 		DeleteVideo(ctx context.Context, userID, videoID string) error
 		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error
+		RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error)
 	}
 
 	// Livestream -.

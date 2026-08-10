@@ -19,6 +19,7 @@ type (
 		RMQ     rmq
 		NATS    nats
 		JWT     jwt
+		Redis   redis
 		Metrics metrics
 		Swagger swagger
 		Tracing tracing
@@ -69,6 +70,11 @@ type (
 	jwt struct {
 		Secret      string        `env:"JWT_SECRET,required"`
 		TokenExpiry time.Duration `env:"JWT_TOKEN_EXPIRY" envDefault:"24h"`
+	}
+
+	// Redis -.
+	redis struct {
+		URL string `env:"REDIS_URL" envDefault:"localhost:6379"`
 	}
 
 	// Metrics -.

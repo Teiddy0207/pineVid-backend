@@ -18,6 +18,7 @@ func ToVideoEntity(userID string, req request.CreateVideoUpload, id, s3Key strin
 		Visibility:   entity.VideoVisibilityPublic,
 		RawS3Key:     s3Key,
 		ThumbnailUrl: req.ThumbnailURL,
+		Duration:     req.Duration,
 	}
 }
 

@@ -6,6 +6,7 @@ type CreateVideoUpload struct {
 	Category     string `json:"category"`
 	FileName     string `json:"file_name" validate:"required"`
 	ThumbnailURL string `json:"thumbnail_url"`
+	Duration     string `json:"duration"`
 }
 
 type UpdateVideo struct {

@@ -22,6 +22,8 @@ import (
 	persistTranslationRepo "github.com/evrone/go-clean-template/internal/repo/persistent/translation"
 	persistUserRepo "github.com/evrone/go-clean-template/internal/repo/persistent/user"
 	persistVideoRepo "github.com/evrone/go-clean-template/internal/repo/persistent/video"
+	persistViewRepo "github.com/evrone/go-clean-template/internal/repo/persistent/view"
+	redispkg "github.com/evrone/go-clean-template/pkg/redis"
 	"github.com/evrone/go-clean-template/internal/repo/webapi"
 	"github.com/evrone/go-clean-template/internal/usecase"
 	"github.com/evrone/go-clean-template/internal/usecase/task"
@@ -54,15 +56,21 @@ type servers struct {
 	http *httpserver.Server
 }
 
-func initUseCases(pg *postgres.Postgres, jwtManager *jwt.Manager, chatHub *events.ChatHub) useCases {
+func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Manager, chatHub *events.ChatHub, l logger.Interface) useCases {
 	translationRepo := persistTranslationRepo.New(pg)
 	taskRepo := persistTaskRepo.New(pg)
 	userRepo := persistUserRepo.New(pg)
 	videoRepo := persistVideoRepo.New(pg)
 	livestreamRepo := persistLivestreamRepo.New(pg)
 
+	redisClient, err := redispkg.New(cfg.Redis.URL, "", 0)
+	if err != nil {
+		l.Error(fmt.Errorf("app - initUseCases - redispkg.New: %w", err))
+	}
+	viewRepo := persistViewRepo.New(pg, redisClient)
+
 	natsPub, _ := nats.NewPublisher()
-	videoUc := videousecase.New(videoRepo, natsPub)
+	videoUc := videousecase.New(videoRepo, viewRepo, natsPub)
 	livestreamUc := livestreamusecase.New(livestreamRepo, chatHub)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo)
 
@@ -188,7 +196,7 @@ func Run(cfg *config.Config) {
 	jwtManager := jwt.New(cfg.JWT.Secret, cfg.JWT.TokenExpiry)
 
 	chatHub := events.NewChatHub()
-	uc := initUseCases(pg, jwtManager, chatHub)
+	uc := initUseCases(cfg, pg, jwtManager, chatHub, l)
 	s := initServers(cfg, uc, chatHub, jwtManager, l)
 	s.startServers()
 	s.waitForShutdown(l)

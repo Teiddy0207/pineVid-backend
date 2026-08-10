@@ -11,20 +11,30 @@ import (
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/evrone/go-clean-template/internal/repo"
+	"github.com/evrone/go-clean-template/internal/repo/persistent/view"
 	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/google/uuid"
 )
 
 type UseCase struct {
 	repo          repo.VideoRepo
+	viewRepo      *view.Repo
 	natsPublisher *nats.Publisher
 }
 
-func New(r repo.VideoRepo, natsPub *nats.Publisher) *UseCase {
+func New(r repo.VideoRepo, vRepo *view.Repo, natsPub *nats.Publisher) *UseCase {
 	return &UseCase{
 		repo:          r,
+		viewRepo:      vRepo,
 		natsPublisher: natsPub,
 	}
+}
+
+func (u *UseCase) RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error) {
+	if u.viewRepo == nil {
+		return false, 0, nil
+	}
+	return u.viewRepo.RecordView(ctx, videoID, clientIP, deviceID)
 }
 
 func (u *UseCase) CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error) {
@@ -78,6 +88,9 @@ func (u *UseCase) GetByID(ctx context.Context, id string) (response.VideoRespons
 	v, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return response.VideoResponse{}, err
+	}
+	if u.viewRepo != nil {
+		v.Views += u.viewRepo.GetPendingViewsForVideo(ctx, id)
 	}
 	return mapper.ToVideoResponse(v), nil
 }

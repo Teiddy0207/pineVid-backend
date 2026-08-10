@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
-	_ "github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
+	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/gofiber/fiber/v2"
@@ -250,4 +251,43 @@ func (r *V1) publishVideo(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
+// @Summary      Record video view count
+// @Description  Increment video view count after >10s playback with IP + Device deduplication (TTL 60s)
+// @Tags         Video
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "Video ID"
+// @Success      200 {object} response.RecordViewResponse
+// @Failure      400 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/videos/{id}/views [post]
+func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
+	videoID := ctx.Params("id")
+	if videoID == "" {
+		return errorResponse(ctx, http.StatusBadRequest, "video id required")
+	}
+
+	clientIP := ctx.IP()
+	if xff := ctx.Get("X-Forwarded-For"); xff != "" {
+		clientIP = strings.Split(xff, ",")[0]
+	}
+
+	deviceID := ctx.Get("X-Device-ID")
+	if deviceID == "" {
+		deviceID = ctx.Get("User-Agent")
+	}
+
+	recorded, newViews, err := r.vd.RecordView(ctx.UserContext(), videoID, clientIP, deviceID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - recordVideoView")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to record video view")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(response.RecordViewResponse{
+		VideoID:    videoID,
+		Recorded:   recorded,
+		TotalViews: newViews,
+	})
 }
