@@ -5,8 +5,9 @@ type StreamKeyAuth struct {
 }
 
 type UpdateLivestreamInfo struct {
-	Title    string `json:"title" validate:"omitempty,min=3,max=255"`
-	Category string `json:"category"`
+	Title        string `json:"title" validate:"omitempty,min=3,max=255"`
+	Category     string `json:"category"`
+	ThumbnailURL string `json:"thumbnail_url"`
 }
 
 type SendChatMessage struct {

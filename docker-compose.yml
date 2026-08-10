@@ -106,7 +106,8 @@ services:
   app:
     container_name: app
     platform: linux/amd64
-    pid: "host"
+    dns:
+      - 127.0.0.11
     build:
       context: .
     environment:
@@ -164,6 +165,19 @@ services:
       app_network:
         aliases:
           - minio.lvh.me
+
+  srs:
+    container_name: srs
+    image: ossrs/srs:5
+    command: ./objs/srs -c conf/http.hls.conf
+    ports:
+      - "1935:1935"
+      - "1985:1985"
+      - "8082:8080"
+    networks:
+      app_network:
+        aliases:
+          - srs.lvh.me
 
 networks:
   app_network:

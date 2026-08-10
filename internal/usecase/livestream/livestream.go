@@ -103,18 +103,18 @@ func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.Livest
 				Title:        "Exploring the edge of the universe",
 				Category:     "Science",
 				IsLive:       true,
-				HLSUrl:       "http://localhost:9000/vod-hls/master.m3u8",
-				ViewersCount: 24812,
+				HLSUrl:       "http://localhost:8082/live/sk_live_8h2k_92md_71px.m3u8",
+				ViewersCount: 0,
 				StartedAt:    &now,
 			}
 			if id == "2" {
 				mockLs.Title = "Ranked grind · road to Radiant"
 				mockLs.Category = "Gaming"
-				mockLs.ViewersCount = 8200
+				mockLs.ViewersCount = 0
 			} else if id == "3" {
 				mockLs.Title = "Late night studio session"
 				mockLs.Category = "Music"
-				mockLs.ViewersCount = 3400
+				mockLs.ViewersCount = 0
 			}
 			return mapper.ToLivestreamResponse(mockLs), nil
 		}

@@ -45,6 +45,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	userGroup := protected.Group("/user")
 	{
 		userGroup.Get("/profile", r.profile)
+		userGroup.Put("/profile", r.updateProfile)
 	}
 
 	studioGroup := protected.Group("/studio")

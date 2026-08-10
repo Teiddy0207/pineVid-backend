@@ -122,3 +122,49 @@ func (r *V1) profile(ctx *fiber.Ctx) error {
 
 	return ctx.Status(http.StatusOK).JSON(user)
 }
+
+// @Summary     Update profile
+// @Description Update user profile details
+// @ID          updateProfile
+// @Tags        Auth
+// @Accept      json
+// @Produce     json
+// @Param       request body     request.UpdateProfile true "Profile details"
+// @Success     200     {object} entity.User
+// @Failure     400     {object} response.Error
+// @Failure     401     {object} response.Error
+// @Failure     500     {object} response.Error
+// @Security    BearerAuth
+// @Router      /v1/user/profile [put]
+func (r *V1) updateProfile(ctx *fiber.Ctx) error {
+	userID, ok := ctx.Locals("userID").(string)
+	if !ok {
+		return errorResponse(ctx, http.StatusUnauthorized, "unauthorized")
+	}
+
+	var body request.UpdateProfile
+	if err := ctx.BodyParser(&body); err != nil {
+		r.l.Error(err, "restapi - v1 - updateProfile")
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	user, err := r.u.GetUser(ctx.UserContext(), userID)
+	if err != nil {
+		if errors.Is(err, entity.ErrUserNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "user not found")
+		}
+		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
+	}
+
+	if body.Username != "" {
+		user.Username = body.Username
+	}
+	if body.Email != "" {
+		user.Email = body.Email
+	}
+	if body.Avatar != "" {
+		user.Avatar = body.Avatar
+	}
+
+	return ctx.Status(http.StatusOK).JSON(user)
+}
