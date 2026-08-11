@@ -15,6 +15,9 @@ type V1 struct {
 	vd      usecase.Video
 	ls      usecase.Livestream
 	ad      usecase.Admin
+	lk      usecase.Like
+	cm      usecase.Comment
+	rc      usecase.Recommendation
 	hub     *events.Hub
 	chatHub *events.ChatHub
 	l       logger.Interface

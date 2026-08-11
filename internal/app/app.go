@@ -15,9 +15,15 @@ import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi"
 	"github.com/evrone/go-clean-template/internal/events"
 	adminusecase "github.com/evrone/go-clean-template/internal/usecase/admin"
+	commentusecase "github.com/evrone/go-clean-template/internal/usecase/comment"
+	likeusecase "github.com/evrone/go-clean-template/internal/usecase/like"
 	livestreamusecase "github.com/evrone/go-clean-template/internal/usecase/livestream"
+	recusecase "github.com/evrone/go-clean-template/internal/usecase/recommendation"
 	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
+	persistCommentRepo "github.com/evrone/go-clean-template/internal/repo/persistent/comment"
+	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
 	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
+	persistRecRepo "github.com/evrone/go-clean-template/internal/repo/persistent/recommendation"
 	persistTaskRepo "github.com/evrone/go-clean-template/internal/repo/persistent/task"
 	persistTranslationRepo "github.com/evrone/go-clean-template/internal/repo/persistent/translation"
 	persistUserRepo "github.com/evrone/go-clean-template/internal/repo/persistent/user"
@@ -42,12 +48,15 @@ import (
 )
 
 type useCases struct {
-	translation usecase.Translation
-	user        usecase.User
-	task        usecase.Task
-	video       usecase.Video
-	livestream  usecase.Livestream
-	admin       usecase.Admin
+	translation    usecase.Translation
+	user           usecase.User
+	task           usecase.Task
+	video          usecase.Video
+	livestream     usecase.Livestream
+	admin          usecase.Admin
+	like           usecase.Like
+	comment        usecase.Comment
+	recommendation usecase.Recommendation
 }
 
 type servers struct {
@@ -62,25 +71,34 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	userRepo := persistUserRepo.New(pg)
 	videoRepo := persistVideoRepo.New(pg)
 	livestreamRepo := persistLivestreamRepo.New(pg)
+	commentRepo := persistCommentRepo.New(pg)
+	recRepo := persistRecRepo.New(pg)
 
 	redisClient, err := redispkg.New(cfg.Redis.URL, "", 0)
 	if err != nil {
 		l.Error(fmt.Errorf("app - initUseCases - redispkg.New: %w", err))
 	}
 	viewRepo := persistViewRepo.New(pg, redisClient)
+	likeRepo := persistLikeRepo.New(pg, redisClient)
 
 	natsPub, _ := nats.NewPublisher()
 	videoUc := videousecase.New(videoRepo, viewRepo, natsPub)
 	livestreamUc := livestreamusecase.New(livestreamRepo, chatHub)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo)
+	likeUc := likeusecase.New(likeRepo, natsPub)
+	commentUc := commentusecase.New(commentRepo, natsPub)
+	recUc := recusecase.New(recRepo, videoRepo)
 
 	return useCases{
-		user:        user.New(userRepo, jwtManager),
-		task:        task.New(taskRepo),
-		translation: translation.New(translationRepo, webapi.New()),
-		video:       videoUc,
-		livestream:  livestreamUc,
-		admin:       adminUc,
+		user:           user.New(userRepo, jwtManager),
+		task:           task.New(taskRepo),
+		translation:    translation.New(translationRepo, webapi.New()),
+		video:          videoUc,
+		livestream:     livestreamUc,
+		admin:          adminUc,
+		like:           likeUc,
+		comment:        commentUc,
+		recommendation: recUc,
 	}
 }
 
@@ -110,7 +128,7 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 	// HTTP Server
 	videoEventHub := events.NewHub()
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
-	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, videoEventHub, chatHub, jwtManager, l)
+	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.recommendation, videoEventHub, chatHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,

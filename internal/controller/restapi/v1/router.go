@@ -11,8 +11,8 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
@@ -24,8 +24,12 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	videosPublicGroup := apiV1Group.Group("/videos")
 	{
 		videosPublicGroup.Get("/", r.listPublicVideos)
+		videosPublicGroup.Get("/feed/personalized", r.getPersonalizedFeed)
 		videosPublicGroup.Get("/:id", r.getVideo)
 		videosPublicGroup.Post("/:id/views", r.recordVideoView)
+		videosPublicGroup.Post("/:id/like", r.toggleLikeVideo)
+		videosPublicGroup.Post("/:id/comments", r.createComment)
+		videosPublicGroup.Get("/:id/comments", r.listVideoComments)
 	}
 
 	apiV1Group.Post("/transcode/callback", r.transcodeCallback)
@@ -37,6 +41,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		livePublicGroup.Get("/streams", r.listActiveStreams)
 		livePublicGroup.Get("/streams/:id", r.getStream)
 		livePublicGroup.Post("/streams/:id/chat", r.sendChatMessage)
+		livePublicGroup.Post("/streams/:id/heart", r.heartStream)
 		livePublicGroup.Post("/auth", r.authenticateRTMPStreamKey) // Internal Webhook for SRS
 	}
 

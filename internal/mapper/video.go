@@ -25,8 +25,12 @@ func ToVideoEntity(userID string, req request.CreateVideoUpload, id, s3Key strin
 // ToVideoResponse converts Video Entity to VideoResponse DTO
 func ToVideoResponse(v entity.Video) response.VideoResponse {
 	return response.VideoResponse{
-		ID:           v.ID,
-		UserID:       v.UserID,
+		ID: v.ID,
+		Creator: response.VideoCreator{
+			ID:     v.UserID,
+			Name:   v.UserName,
+			Avatar: v.UserAvatar,
+		},
 		Title:        v.Title,
 		Description:  v.Description,
 		Category:     v.Category,
@@ -40,6 +44,7 @@ func ToVideoResponse(v entity.Video) response.VideoResponse {
 		UpdatedAt:    v.UpdatedAt,
 	}
 }
+
 
 // ToVideoResponses converts Video Entity slice to VideoResponse DTO slice
 func ToVideoResponses(videos []entity.Video) []response.VideoResponse {

@@ -44,7 +44,7 @@ func (m *MockVideoRepo) Delete(ctx context.Context, id string) error {
 
 func TestHandleTranscodeCallback_Success(t *testing.T) {
 	mockRepo := new(MockVideoRepo)
-	uc := video.New(mockRepo, nil)
+	uc := video.New(mockRepo, nil, nil)
 
 	videoID := "test-video-123"
 	existingVideo := entity.Video{
@@ -69,7 +69,7 @@ func TestHandleTranscodeCallback_Success(t *testing.T) {
 
 func TestHandleTranscodeCallback_Failed(t *testing.T) {
 	mockRepo := new(MockVideoRepo)
-	uc := video.New(mockRepo, nil)
+	uc := video.New(mockRepo, nil, nil)
 
 	videoID := "test-video-456"
 	existingVideo := entity.Video{

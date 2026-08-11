@@ -24,6 +24,7 @@ type (
 		Register(ctx context.Context, username, email, password string) (entity.User, error)
 		Login(ctx context.Context, email, password string) (string, error)
 		GetUser(ctx context.Context, userID string) (entity.User, error)
+		UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error)
 	}
 
 	// Task -.
@@ -68,5 +69,22 @@ type (
 		GetWorkersStatus(ctx context.Context) ([]response.WorkerStatusResponse, error)
 		BanStream(ctx context.Context, streamID string) error
 		BanVideo(ctx context.Context, videoID string) error
+	}
+
+	// Like -.
+	Like interface {
+		ToggleLikeVideo(ctx context.Context, userID, videoID string) (response.LikeResponse, error)
+		HeartStream(ctx context.Context, streamID string) (response.HeartResponse, error)
+	}
+
+	// Comment -.
+	Comment interface {
+		CreateComment(ctx context.Context, videoID, userID, userName, userAvatar string, req request.CreateCommentRequest) (response.CommentResponse, error)
+		ListVideoComments(ctx context.Context, videoID string, page, limit int) (response.PageResponse[response.CommentResponse], error)
+	}
+
+	// Recommendation -.
+	Recommendation interface {
+		GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error)
 	}
 )

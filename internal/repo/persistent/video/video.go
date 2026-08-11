@@ -40,9 +40,10 @@ func (r *Repo) Store(ctx context.Context, v *entity.Video) error {
 
 func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 	sql, args, err := r.Builder.
-		Select("id", "user_id", "title", "description", "category", "status", "visibility", "raw_s3_key", "hls_url", "thumbnail_url", "duration", "views", "created_at", "updated_at").
-		From("videos").
-		Where(sq.Eq{"id": id}).
+		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.views", "v.created_at", "v.updated_at").
+		From("videos v").
+		LeftJoin("users u ON v.user_id::text = u.id::text").
+		Where(sq.Eq{"v.id": id}).
 		ToSql()
 	if err != nil {
 		return entity.Video{}, fmt.Errorf("VideoRepo - GetByID - r.Builder: %w", err)
@@ -50,7 +51,7 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 
 	var v entity.Video
 	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&v.ID, &v.UserID, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.Views, &v.CreatedAt, &v.UpdatedAt)
+		Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.Views, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Video{}, entity.ErrVideoNotFound
@@ -62,19 +63,19 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 }
 
 func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Video, int, error) {
-	countBuilder := r.Builder.Select("COUNT(*)").From("videos")
+	countBuilder := r.Builder.Select("COUNT(*)").From("videos v")
 
 	if filter.UserID != "" {
-		countBuilder = countBuilder.Where(sq.Eq{"user_id": filter.UserID})
+		countBuilder = countBuilder.Where(sq.Eq{"v.user_id": filter.UserID})
 	}
 	if filter.Category != "" {
-		countBuilder = countBuilder.Where(sq.Eq{"category": filter.Category})
+		countBuilder = countBuilder.Where(sq.Eq{"v.category": filter.Category})
 	}
 	if filter.Status != nil {
-		countBuilder = countBuilder.Where(sq.Eq{"status": *filter.Status})
+		countBuilder = countBuilder.Where(sq.Eq{"v.status": *filter.Status})
 	}
 	if filter.Visibility != nil {
-		countBuilder = countBuilder.Where(sq.Eq{"visibility": *filter.Visibility})
+		countBuilder = countBuilder.Where(sq.Eq{"v.visibility": *filter.Visibility})
 	}
 
 	countSQL, countArgs, err := countBuilder.ToSql()
@@ -89,23 +90,24 @@ func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Vide
 	}
 
 	dataBuilder := r.Builder.
-		Select("id", "user_id", "title", "description", "category", "status", "visibility", "raw_s3_key", "hls_url", "thumbnail_url", "duration", "views", "created_at", "updated_at").
-		From("videos").
-		OrderBy("created_at DESC").
+		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.views", "v.created_at", "v.updated_at").
+		From("videos v").
+		LeftJoin("users u ON v.user_id::text = u.id::text").
+		OrderBy("v.created_at DESC").
 		Limit(filter.Limit).
 		Offset(filter.Offset)
 
 	if filter.UserID != "" {
-		dataBuilder = dataBuilder.Where(sq.Eq{"user_id": filter.UserID})
+		dataBuilder = dataBuilder.Where(sq.Eq{"v.user_id": filter.UserID})
 	}
 	if filter.Category != "" {
-		dataBuilder = dataBuilder.Where(sq.Eq{"category": filter.Category})
+		dataBuilder = dataBuilder.Where(sq.Eq{"v.category": filter.Category})
 	}
 	if filter.Status != nil {
-		dataBuilder = dataBuilder.Where(sq.Eq{"status": *filter.Status})
+		dataBuilder = dataBuilder.Where(sq.Eq{"v.status": *filter.Status})
 	}
 	if filter.Visibility != nil {
-		dataBuilder = dataBuilder.Where(sq.Eq{"visibility": *filter.Visibility})
+		dataBuilder = dataBuilder.Where(sq.Eq{"v.visibility": *filter.Visibility})
 	}
 
 	dataSQL, dataArgs, err := dataBuilder.ToSql()
@@ -122,7 +124,7 @@ func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Vide
 	videos := make([]entity.Video, 0, filter.Limit)
 	for rows.Next() {
 		var v entity.Video
-		err = rows.Scan(&v.ID, &v.UserID, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.Views, &v.CreatedAt, &v.UpdatedAt)
+		err = rows.Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.Views, &v.CreatedAt, &v.UpdatedAt)
 		if err != nil {
 			return nil, 0, fmt.Errorf("VideoRepo - List - rows.Scan: %w", err)
 		}

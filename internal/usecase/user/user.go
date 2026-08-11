@@ -82,3 +82,29 @@ func (uc *UseCase) GetUser(ctx context.Context, userID string) (entity.User, err
 
 	return user, nil
 }
+
+// UpdateUser persists changes to username, email, and avatar for the given user.
+func (uc *UseCase) UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error) {
+	user, err := uc.repo.GetByID(ctx, userID)
+	if err != nil {
+		return entity.User{}, fmt.Errorf("UserUseCase - UpdateUser - uc.repo.GetByID: %w", err)
+	}
+
+	if username != "" {
+		user.Username = username
+	}
+	if email != "" {
+		user.Email = email
+	}
+	if avatar != "" {
+		user.Avatar = avatar
+	}
+	user.UpdatedAt = time.Now().UTC()
+
+	if err := uc.repo.Update(ctx, &user); err != nil {
+		return entity.User{}, fmt.Errorf("UserUseCase - UpdateUser - uc.repo.Update: %w", err)
+	}
+
+	return user, nil
+}
+

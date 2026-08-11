@@ -61,3 +61,13 @@ func (r *tracedRepo) GetByEmail(ctx context.Context, email string) (entity.User,
 
 	return result, err
 }
+
+func (r *tracedRepo) Update(ctx context.Context, user *entity.User) error {
+	ctx, span := startSpan(ctx, "UserRepo.Update", attribute.String("user.id", user.ID))
+
+	err := r.next.Update(ctx, user)
+	endSpan(span, err)
+
+	return err
+}
+

@@ -49,6 +49,16 @@ func (h *ChatHub) Subscribe(streamID string) (<-chan ChatMessage, func()) {
 	return ch, unsubscribe
 }
 
+func safeSend(ch chan ChatMessage, msg ChatMessage) {
+	defer func() {
+		_ = recover()
+	}()
+	select {
+	case ch <- msg:
+	default:
+	}
+}
+
 // Broadcast sends a ChatMessage to all subscribers in a live stream room
 func (h *ChatHub) Broadcast(streamID string, msg ChatMessage) {
 	h.mu.RLock()
@@ -56,11 +66,7 @@ func (h *ChatHub) Broadcast(streamID string, msg ChatMessage) {
 
 	if room, exists := h.rooms[streamID]; exists {
 		for ch := range room {
-			select {
-			case ch <- msg:
-			default:
-				// skip slow client
-			}
+			safeSend(ch, msg)
 		}
 	}
 }

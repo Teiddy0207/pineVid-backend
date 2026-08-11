@@ -7,8 +7,10 @@ import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/gofiber/fiber/v2"
 )
+
 
 // @Summary     Register
 // @Description Register a new user
@@ -120,7 +122,7 @@ func (r *V1) profile(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
 	}
 
-	return ctx.Status(http.StatusOK).JSON(user)
+	return ctx.Status(http.StatusOK).JSON(mapper.ToUserResponse(user))
 }
 
 // @Summary     Update profile
@@ -148,23 +150,16 @@ func (r *V1) updateProfile(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
 	}
 
-	user, err := r.u.GetUser(ctx.UserContext(), userID)
+	user, err := r.u.UpdateUser(ctx.UserContext(), userID, body.Username, body.Email, body.Avatar)
 	if err != nil {
+		r.l.Error(err, "restapi - v1 - updateProfile")
+
 		if errors.Is(err, entity.ErrUserNotFound) {
 			return errorResponse(ctx, http.StatusNotFound, "user not found")
 		}
+
 		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
 	}
 
-	if body.Username != "" {
-		user.Username = body.Username
-	}
-	if body.Email != "" {
-		user.Email = body.Email
-	}
-	if body.Avatar != "" {
-		user.Avatar = body.Avatar
-	}
-
-	return ctx.Status(http.StatusOK).JSON(user)
+	return ctx.Status(http.StatusOK).JSON(mapper.ToUserResponse(user))
 }

@@ -63,3 +63,13 @@ func (u *tracedUseCase) GetUser(ctx context.Context, userID string) (entity.User
 
 	return result, err
 }
+
+func (u *tracedUseCase) UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error) {
+	ctx, span := startSpan(ctx, "UserUseCase.UpdateUser", attribute.String("user.id", userID))
+
+	result, err := u.next.UpdateUser(ctx, userID, username, email, avatar)
+	endSpan(span, err)
+
+	return result, err
+}
+

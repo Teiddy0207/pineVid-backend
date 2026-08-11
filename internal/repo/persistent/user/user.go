@@ -60,7 +60,7 @@ func (r *Repo) GetByEmail(ctx context.Context, email string) (entity.User, error
 
 func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, error) {
 	sql, args, err := r.Builder.
-		Select("id, username, email, password_hash, created_at, updated_at").
+		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, created_at, updated_at").
 		From("users").
 		Where(sq.Eq{column: value}).
 		ToSql()
@@ -71,7 +71,7 @@ func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, 
 	var user entity.User
 
 	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
+		Scan(&user.ID, &user.Username, &user.Email, &user.Avatar, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.User{}, entity.ErrUserNotFound
@@ -82,3 +82,26 @@ func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, 
 
 	return user, nil
 }
+
+// Update persists username, email, and avatar_url changes for the given user.
+func (r *Repo) Update(ctx context.Context, user *entity.User) error {
+	sql, args, err := r.Builder.
+		Update("users").
+		Set("username", user.Username).
+		Set("email", user.Email).
+		Set("avatar_url", user.Avatar).
+		Set("updated_at", user.UpdatedAt).
+		Where(sq.Eq{"id": user.ID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("UserRepo - Update - r.Builder: %w", err)
+	}
+
+	_, err = r.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UserRepo - Update - r.Pool.Exec: %w", err)
+	}
+
+	return nil
+}
+
