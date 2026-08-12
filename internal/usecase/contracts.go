@@ -7,7 +7,6 @@ import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
-	"github.com/evrone/go-clean-template/internal/events"
 )
 
 //go:generate mockgen -source=contracts.go -destination=./mocks_usecase_test.go -package=usecase_test
@@ -60,7 +59,13 @@ type (
 		ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error)
 		UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error)
 		SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error)
-		SubscribeChat(streamID string) (<-chan events.ChatMessage, func(), error)
+		SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error)
+	}
+
+	// History -.
+	History interface {
+		RecordWatch(ctx context.Context, userID, videoID string, watchSeconds int) error
+		ListHistory(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 	}
 
 	// Admin -.

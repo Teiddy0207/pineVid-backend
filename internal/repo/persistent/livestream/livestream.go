@@ -38,20 +38,29 @@ func (r *Repo) Store(ctx context.Context, ls *entity.Livestream) error {
 	return nil
 }
 
+var livestreamSelectColumns = []string{
+	"ls.id", "ls.user_id", "COALESCE(u.username, u.email, 'Streamer')", "COALESCE(u.avatar_url, '')",
+	"ls.stream_key", "ls.title", "ls.category", "ls.is_live", "ls.hls_url", "ls.viewers_count",
+	"ls.started_at", "ls.ended_at", "ls.created_at", "ls.updated_at",
+}
+
+func scanLivestream(row pgx.Row, ls *entity.Livestream) error {
+	return row.Scan(&ls.ID, &ls.UserID, &ls.UserName, &ls.UserAvatar, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt)
+}
+
 func (r *Repo) GetByID(ctx context.Context, id string) (entity.Livestream, error) {
 	sql, args, err := r.Builder.
-		Select("id", "user_id", "stream_key", "title", "category", "is_live", "hls_url", "viewers_count", "started_at", "ended_at", "created_at", "updated_at").
-		From("livestreams").
-		Where(sq.Eq{"id": id}).
+		Select(livestreamSelectColumns...).
+		From("livestreams ls").
+		LeftJoin("users u ON ls.user_id::text = u.id::text").
+		Where(sq.Eq{"ls.id": id}).
 		ToSql()
 	if err != nil {
 		return entity.Livestream{}, fmt.Errorf("LivestreamRepo - GetByID - r.Builder: %w", err)
 	}
 
 	var ls entity.Livestream
-	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&ls.ID, &ls.UserID, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt)
-	if err != nil {
+	if err := scanLivestream(r.Pool.QueryRow(ctx, sql, args...), &ls); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Livestream{}, entity.ErrLivestreamNotFound
 		}
@@ -63,18 +72,17 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Livestream, error
 
 func (r *Repo) GetByUserID(ctx context.Context, userID string) (entity.Livestream, error) {
 	sql, args, err := r.Builder.
-		Select("id", "user_id", "stream_key", "title", "category", "is_live", "hls_url", "viewers_count", "started_at", "ended_at", "created_at", "updated_at").
-		From("livestreams").
-		Where(sq.Eq{"user_id": userID}).
+		Select(livestreamSelectColumns...).
+		From("livestreams ls").
+		LeftJoin("users u ON ls.user_id::text = u.id::text").
+		Where(sq.Eq{"ls.user_id": userID}).
 		ToSql()
 	if err != nil {
 		return entity.Livestream{}, fmt.Errorf("LivestreamRepo - GetByUserID - r.Builder: %w", err)
 	}
 
 	var ls entity.Livestream
-	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&ls.ID, &ls.UserID, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt)
-	if err != nil {
+	if err := scanLivestream(r.Pool.QueryRow(ctx, sql, args...), &ls); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Livestream{}, entity.ErrLivestreamNotFound
 		}
@@ -86,18 +94,17 @@ func (r *Repo) GetByUserID(ctx context.Context, userID string) (entity.Livestrea
 
 func (r *Repo) GetByStreamKey(ctx context.Context, streamKey string) (entity.Livestream, error) {
 	sql, args, err := r.Builder.
-		Select("id", "user_id", "stream_key", "title", "category", "is_live", "hls_url", "viewers_count", "started_at", "ended_at", "created_at", "updated_at").
-		From("livestreams").
-		Where(sq.Eq{"stream_key": streamKey}).
+		Select(livestreamSelectColumns...).
+		From("livestreams ls").
+		LeftJoin("users u ON ls.user_id::text = u.id::text").
+		Where(sq.Eq{"ls.stream_key": streamKey}).
 		ToSql()
 	if err != nil {
 		return entity.Livestream{}, fmt.Errorf("LivestreamRepo - GetByStreamKey - r.Builder: %w", err)
 	}
 
 	var ls entity.Livestream
-	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&ls.ID, &ls.UserID, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt)
-	if err != nil {
+	if err := scanLivestream(r.Pool.QueryRow(ctx, sql, args...), &ls); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Livestream{}, entity.ErrInvalidStreamKey
 		}
@@ -125,15 +132,16 @@ func (r *Repo) ListActive(ctx context.Context, category string, limit, offset in
 	}
 
 	dataBuilder := r.Builder.
-		Select("id", "user_id", "stream_key", "title", "category", "is_live", "hls_url", "viewers_count", "started_at", "ended_at", "created_at", "updated_at").
-		From("livestreams").
-		Where(sq.Eq{"is_live": true}).
-		OrderBy("viewers_count DESC").
+		Select(livestreamSelectColumns...).
+		From("livestreams ls").
+		LeftJoin("users u ON ls.user_id::text = u.id::text").
+		Where(sq.Eq{"ls.is_live": true}).
+		OrderBy("ls.viewers_count DESC").
 		Limit(uint64(limit)).
 		Offset(uint64(offset))
 
 	if category != "" {
-		dataBuilder = dataBuilder.Where(sq.Eq{"category": category})
+		dataBuilder = dataBuilder.Where(sq.Eq{"ls.category": category})
 	}
 
 	dataSQL, dataArgs, err := dataBuilder.ToSql()
@@ -150,8 +158,7 @@ func (r *Repo) ListActive(ctx context.Context, category string, limit, offset in
 	streams := make([]entity.Livestream, 0, limit)
 	for rows.Next() {
 		var ls entity.Livestream
-		err = rows.Scan(&ls.ID, &ls.UserID, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt)
-		if err != nil {
+		if err := scanLivestream(rows, &ls); err != nil {
 			return nil, 0, fmt.Errorf("LivestreamRepo - ListActive - rows.Scan: %w", err)
 		}
 		streams = append(streams, ls)

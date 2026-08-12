@@ -11,8 +11,8 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hs usecase.History, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hs: hs, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
@@ -21,7 +21,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		authGroup.Post("/login", r.login)
 	}
 
-	videosPublicGroup := apiV1Group.Group("/videos")
+	videosPublicGroup := apiV1Group.Group("/videos", middleware.OptionalAuth(jwtManager))
 	{
 		videosPublicGroup.Get("/", r.listPublicVideos)
 		videosPublicGroup.Get("/feed/personalized", r.getPersonalizedFeed)
@@ -52,6 +52,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	{
 		userGroup.Get("/profile", r.profile)
 		userGroup.Put("/profile", r.updateProfile)
+		userGroup.Get("/history", r.getWatchHistory)
 	}
 
 	studioGroup := protected.Group("/studio")

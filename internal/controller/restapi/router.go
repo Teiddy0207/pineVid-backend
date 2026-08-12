@@ -18,7 +18,7 @@ import (
 	"github.com/gofiber/swagger"
 )
 
-func NewRouter(app *fiber.App, cfg *config.Config, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+func NewRouter(app *fiber.App, cfg *config.Config, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hs usecase.History, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
 	// CORS Middleware
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
@@ -52,6 +52,6 @@ func NewRouter(app *fiber.App, cfg *config.Config, t usecase.Translation, u usec
 			apiV1Group.Use(otelfiber.Middleware())
 		}
 
-		v1.NewRoutes(apiV1Group, t, u, tk, vd, ls, ad, lk, cm, rc, hub, chatHub, jwtManager, l)
+		v1.NewRoutes(apiV1Group, t, u, tk, vd, ls, ad, lk, cm, rc, hs, hub, chatHub, jwtManager, l)
 	}
 }

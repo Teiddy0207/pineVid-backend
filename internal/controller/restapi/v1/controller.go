@@ -18,6 +18,7 @@ type V1 struct {
 	lk      usecase.Like
 	cm      usecase.Comment
 	rc      usecase.Recommendation
+	hs      usecase.History
 	hub     *events.Hub
 	chatHub *events.ChatHub
 	l       logger.Interface

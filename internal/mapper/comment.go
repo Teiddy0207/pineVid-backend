@@ -19,13 +19,15 @@ func ToCommentEntity(videoID, userID, userName, userAvatar string, req request.C
 
 func ToCommentResponse(c entity.Comment) response.CommentResponse {
 	return response.CommentResponse{
-		ID:         c.ID,
-		VideoID:    c.VideoID,
-		UserID:     c.UserID,
-		UserName:   c.UserName,
-		UserAvatar: c.UserAvatar,
-		Content:    c.Content,
-		CreatedAt:  c.CreatedAt,
+		ID:      c.ID,
+		VideoID: c.VideoID,
+		User: response.CommentUser{
+			ID:     c.UserID,
+			Name:   c.UserName,
+			Avatar: c.UserAvatar,
+		},
+		Content:   c.Content,
+		CreatedAt: c.CreatedAt,
 	}
 }
 

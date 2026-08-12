@@ -64,6 +64,12 @@ type (
 		Offset     uint64
 	}
 
+	// WatchHistoryRepo -.
+	WatchHistoryRepo interface {
+		Upsert(ctx context.Context, userID, videoID string, watchSeconds int) error
+		ListByUser(ctx context.Context, userID string, limit, offset int) ([]entity.Video, int, error)
+	}
+
 	// LivestreamRepo -.
 	LivestreamRepo interface {
 		Store(ctx context.Context, ls *entity.Livestream) error

@@ -8,8 +8,12 @@ import (
 
 func ToLivestreamResponse(ls entity.Livestream) response.LivestreamResponse {
 	return response.LivestreamResponse{
-		ID:           ls.ID,
-		UserID:       ls.UserID,
+		ID: ls.ID,
+		Streamer: response.LivestreamStreamer{
+			ID:     ls.UserID,
+			Name:   ls.UserName,
+			Avatar: ls.UserAvatar,
+		},
 		Title:        ls.Title,
 		Category:     ls.Category,
 		IsLive:       ls.IsLive,
@@ -48,9 +52,11 @@ func ToLivestreamPageResponse(streams []entity.Livestream, totalItems, page, lim
 
 func ToChatMessageResponse(msg events.ChatMessage) response.ChatMessageResponse {
 	return response.ChatMessageResponse{
-		StreamID:  msg.StreamID,
-		Username:  msg.Username,
-		Avatar:    msg.Avatar,
+		StreamID: msg.StreamID,
+		User: response.ChatUser{
+			Name:   msg.Username,
+			Avatar: msg.Avatar,
+		},
 		Text:      msg.Text,
 		CreatedAt: msg.CreatedAt,
 	}

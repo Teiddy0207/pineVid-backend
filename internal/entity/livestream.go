@@ -13,6 +13,8 @@ var (
 type Livestream struct {
 	ID           string     `json:"id"`
 	UserID       string     `json:"user_id"`
+	UserName     string     `json:"user_name"`
+	UserAvatar   string     `json:"user_avatar"`
 	StreamKey    string     `json:"stream_key"`
 	Title        string     `json:"title"`
 	Category     string     `json:"category"`

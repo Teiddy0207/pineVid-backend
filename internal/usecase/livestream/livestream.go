@@ -177,10 +177,22 @@ func (u *UseCase) SendChatMessage(ctx context.Context, streamID string, req requ
 	return mapper.ToChatMessageResponse(msg), nil
 }
 
-func (u *UseCase) SubscribeChat(streamID string) (<-chan events.ChatMessage, func(), error) {
+// SubscribeChat maps the raw internal ChatHub event stream to the public
+// response DTO shape before handing it to the controller, so the SSE stream
+// (like the REST endpoint) never leaks the flat internal events.ChatMessage.
+func (u *UseCase) SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error) {
 	if u.chatHub == nil {
 		return nil, nil, errors.New("chat hub unavailable")
 	}
-	ch, unsub := u.chatHub.Subscribe(streamID)
-	return ch, unsub, nil
+	raw, unsub := u.chatHub.Subscribe(streamID)
+
+	mapped := make(chan response.ChatMessageResponse)
+	go func() {
+		defer close(mapped)
+		for msg := range raw {
+			mapped <- mapper.ToChatMessageResponse(msg)
+		}
+	}()
+
+	return mapped, unsub, nil
 }

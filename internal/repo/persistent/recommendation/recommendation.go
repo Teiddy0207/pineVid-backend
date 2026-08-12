@@ -23,6 +23,8 @@ func (r *Repo) FetchInteractions(ctx context.Context) ([]entity.UserVideoInterac
 			SELECT user_id, video_id, 2.0 as rating FROM likes
 			UNION ALL
 			SELECT user_id, video_id, 3.0 as rating FROM comments
+			UNION ALL
+			SELECT user_id, video_id, 1.0 as rating FROM watch_history
 		) interactions
 		GROUP BY user_id, video_id;
 	`

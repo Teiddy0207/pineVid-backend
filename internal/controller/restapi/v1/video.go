@@ -285,6 +285,14 @@ func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to record video view")
 	}
 
+	// Best-effort: only logged-in viewers (real userID from OptionalAuth) get a
+	// watch-history entry; anonymous views never had one, so this is additive.
+	if userID, ok := ctx.Locals("userID").(string); ok && userID != "" {
+		if err := r.hs.RecordWatch(ctx.UserContext(), userID, videoID, 0); err != nil {
+			r.l.Error(err, "restapi - v1 - recordVideoView - RecordWatch")
+		}
+	}
+
 	return ctx.Status(http.StatusOK).JSON(response.RecordViewResponse{
 		VideoID:    videoID,
 		Recorded:   recorded,

@@ -16,11 +16,13 @@ import (
 	"github.com/evrone/go-clean-template/internal/events"
 	adminusecase "github.com/evrone/go-clean-template/internal/usecase/admin"
 	commentusecase "github.com/evrone/go-clean-template/internal/usecase/comment"
+	historyusecase "github.com/evrone/go-clean-template/internal/usecase/history"
 	likeusecase "github.com/evrone/go-clean-template/internal/usecase/like"
 	livestreamusecase "github.com/evrone/go-clean-template/internal/usecase/livestream"
 	recusecase "github.com/evrone/go-clean-template/internal/usecase/recommendation"
 	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
 	persistCommentRepo "github.com/evrone/go-clean-template/internal/repo/persistent/comment"
+	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
 	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
 	persistRecRepo "github.com/evrone/go-clean-template/internal/repo/persistent/recommendation"
@@ -57,6 +59,7 @@ type useCases struct {
 	like           usecase.Like
 	comment        usecase.Comment
 	recommendation usecase.Recommendation
+	history        usecase.History
 }
 
 type servers struct {
@@ -73,6 +76,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	livestreamRepo := persistLivestreamRepo.New(pg)
 	commentRepo := persistCommentRepo.New(pg)
 	recRepo := persistRecRepo.New(pg)
+	historyRepo := persistHistoryRepo.New(pg)
 
 	redisClient, err := redispkg.New(cfg.Redis.URL, "", 0)
 	if err != nil {
@@ -88,6 +92,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	likeUc := likeusecase.New(likeRepo, natsPub)
 	commentUc := commentusecase.New(commentRepo, natsPub)
 	recUc := recusecase.New(recRepo, videoRepo)
+	historyUc := historyusecase.New(historyRepo)
 
 	return useCases{
 		user:           user.New(userRepo, jwtManager),
@@ -99,6 +104,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		like:           likeUc,
 		comment:        commentUc,
 		recommendation: recUc,
+		history:        historyUc,
 	}
 }
 
@@ -128,7 +134,7 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 	// HTTP Server
 	videoEventHub := events.NewHub()
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
-	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.recommendation, videoEventHub, chatHub, jwtManager, l)
+	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.recommendation, uc.history, videoEventHub, chatHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,
