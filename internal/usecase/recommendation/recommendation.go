@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
@@ -20,6 +22,11 @@ type UseCase struct {
 	gamma     float64 // Learning rate
 	lambda    float64 // Regularization
 	epochs    int
+
+	mu             sync.RWMutex
+	trainedIsEmpty bool                 // true if the last training pass had zero interactions (cold start)
+	userVec        map[string][]float64 // trained P, keyed by userID
+	videoVec       map[string][]float64 // trained Q, keyed by videoID
 }
 
 func New(r *persistRecRepo.Repo, vr repo.VideoRepo) *UseCase {
@@ -33,27 +40,44 @@ func New(r *persistRecRepo.Repo, vr repo.VideoRepo) *UseCase {
 	}
 }
 
-// GetPersonalizedFeed runs Matrix Factorization with SGD and returns top-ranked videos for user
-func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error) {
+// StartBackgroundTraining trains the model once immediately (so the cache is
+// warm before the server starts taking traffic), then keeps retraining on a
+// fixed interval in the background for as long as ctx is alive. No HTTP
+// request ever waits on training — GetPersonalizedFeed only ever reads
+// whatever is currently cached.
+func (u *UseCase) StartBackgroundTraining(ctx context.Context, interval time.Duration) {
+	_ = u.train(ctx)
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = u.train(ctx)
+			}
+		}
+	}()
+}
+
+// train runs Matrix Factorization with SGD over the latest interactions and
+// publishes the result into u.userVec/u.videoVec.
+func (u *UseCase) train(ctx context.Context) error {
 	interactions, err := u.repo.FetchInteractions(ctx)
 	if err != nil {
-		return response.PageResponse[response.RecommendedVideoItem]{}, fmt.Errorf("RecommendationUseCase - FetchInteractions: %w", err)
-	}
-
-	status := entity.VideoStatusComplete
-	visibility := entity.VideoVisibilityPublic
-	allVideos, totalVideos, err := u.videoRepo.List(ctx, repo.VideoFilter{Status: &status, Visibility: &visibility, Limit: 50})
-	if err != nil {
-		return response.PageResponse[response.RecommendedVideoItem]{}, fmt.Errorf("RecommendationUseCase - List: %w", err)
+		return fmt.Errorf("RecommendationUseCase - train - FetchInteractions: %w", err)
 	}
 
 	if len(interactions) == 0 {
-		// Fallback for cold-start users
-		recs := make([]entity.RecommendedVideo, len(allVideos))
-		for i, v := range allVideos {
-			recs[i] = entity.RecommendedVideo{Video: v, PredictedScore: 1.0}
-		}
-		return mapper.ToPersonalizedFeedPageResponse(recs, totalVideos, page, limit), nil
+		u.mu.Lock()
+		u.userVec = nil
+		u.videoVec = nil
+		u.trainedIsEmpty = true
+		u.mu.Unlock()
+		return nil
 	}
 
 	// 1. Index users and videos to matrix IDs
@@ -116,17 +140,60 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 		}
 	}
 
-	// 3. Compute predicted scores for requested user
-	uIdx, exists := userMap[userID]
+	// 3. Publish the trained vectors keyed by real ID, so serving can look up
+	// any user/video directly without redoing the index mapping above.
+	userVec := make(map[string][]float64, uCount)
+	for id, idx := range userMap {
+		userVec[id] = P[idx]
+	}
+	videoVec := make(map[string][]float64, vCount)
+	for id, idx := range videoMap {
+		videoVec[id] = Q[idx]
+	}
 
-	recs := make([]entity.RecommendedVideo, 0)
+	u.mu.Lock()
+	u.userVec = userVec
+	u.videoVec = videoVec
+	u.trainedIsEmpty = false
+	u.mu.Unlock()
+
+	return nil
+}
+
+// GetPersonalizedFeed returns top-ranked videos for a user, reading whatever
+// model StartBackgroundTraining has most recently published. The view-count
+// baseline is always computed fresh from the DB.
+func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error) {
+	status := entity.VideoStatusComplete
+	visibility := entity.VideoVisibilityPublic
+	allVideos, totalVideos, err := u.videoRepo.List(ctx, repo.VideoFilter{Status: &status, Visibility: &visibility, Limit: 50})
+	if err != nil {
+		return response.PageResponse[response.RecommendedVideoItem]{}, fmt.Errorf("RecommendationUseCase - List: %w", err)
+	}
+
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	if u.trainedIsEmpty || u.userVec == nil {
+		// Cold-start fallback: no interactions exist anywhere yet (or the
+		// background trainer hasn't run for the first time).
+		recs := make([]entity.RecommendedVideo, len(allVideos))
+		for i, v := range allVideos {
+			recs[i] = entity.RecommendedVideo{Video: v, PredictedScore: 1.0}
+		}
+		return mapper.ToPersonalizedFeedPageResponse(recs, totalVideos, page, limit), nil
+	}
+
+	userFactors, hasUser := u.userVec[userID]
+
+	recs := make([]entity.RecommendedVideo, 0, len(allVideos))
 	for _, v := range allVideos {
-		score := float64(v.Views) * 0.1 // Base baseline
-		if exists {
-			if vIdx, found := videoMap[v.ID]; found {
+		score := float64(v.Views) * 0.1 // Base baseline, always fresh
+		if hasUser {
+			if videoFactors, found := u.videoVec[v.ID]; found {
 				pred := 0.0
-				for f := 0; f < k; f++ {
-					pred += P[uIdx][f] * Q[vIdx][f]
+				for f := 0; f < u.factors; f++ {
+					pred += userFactors[f] * videoFactors[f]
 				}
 				score += pred
 			}

@@ -80,16 +80,36 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 		return false, entity.ErrInvalidStreamKey
 	}
 
-	// Mark stream as live
+	// Mark stream as live. HLSUrl is a relative path served by SRS itself
+	// (vhost hls_m3u8_file = [app]/[stream].m3u8) — the frontend prefixes
+	// "/live/..." paths with the SRS host, same convention as VOD's
+	// "/hls-streams/..." being prefixed with the MinIO host.
 	now := time.Now().UTC()
 	ls.IsLive = true
 	ls.StartedAt = &now
-	ls.HLSUrl = fmt.Sprintf("http://localhost:9000/hls-streams/live/%s/master.m3u8", ls.StreamKey)
+	ls.EndedAt = nil
+	ls.HLSUrl = fmt.Sprintf("/live/%s.m3u8", ls.StreamKey)
 	ls.UpdatedAt = now
 
 	_ = u.repo.Update(ctx, &ls)
 
 	return true, nil
+}
+
+// UnpublishStream is called via SRS's on_unpublish webhook when a streamer
+// disconnects (OBS closed, network drop, etc). Marks the stream offline.
+func (u *UseCase) UnpublishStream(ctx context.Context, streamKey string) error {
+	ls, err := u.repo.GetByStreamKey(ctx, streamKey)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	ls.IsLive = false
+	ls.EndedAt = &now
+	ls.UpdatedAt = now
+
+	return u.repo.Update(ctx, &ls)
 }
 
 func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error) {

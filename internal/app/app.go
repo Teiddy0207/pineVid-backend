@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/evrone/go-clean-template/config"
 	"github.com/evrone/go-clean-template/internal/controller/grpc"
@@ -92,6 +93,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	likeUc := likeusecase.New(likeRepo, natsPub)
 	commentUc := commentusecase.New(commentRepo, natsPub)
 	recUc := recusecase.New(recRepo, videoRepo)
+	recUc.StartBackgroundTraining(context.Background(), 5*time.Minute)
 	historyUc := historyusecase.New(historyRepo)
 
 	return useCases{

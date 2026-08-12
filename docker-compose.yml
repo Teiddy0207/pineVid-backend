@@ -169,7 +169,11 @@ services:
   srs:
     container_name: srs
     image: ossrs/srs:5
-    command: ./objs/srs -c conf/http.hls.conf
+    command: ./objs/srs -c conf/live.conf
+    volumes:
+      - ./srs/live.conf:/usr/local/srs/conf/live.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "1935:1935"
       - "1985:1985"

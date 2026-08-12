@@ -171,14 +171,23 @@ func (r *V1) resetStreamKey(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(keyDTO)
 }
 
+// srsHookRejected/srsHookAccepted are the JSON bodies SRS's HTTP callback
+// protocol expects: {"code": 0} means accepted, any other code rejects the
+// publish/unpublish action. A plain-text body (the old behavior here) is not
+// recognized by SRS as success at all.
+var (
+	srsHookAccepted = fiber.Map{"code": 0}
+	srsHookRejected = fiber.Map{"code": 1}
+)
+
 // @Summary      Authenticate RTMP Stream Key
 // @Description  Webhook used by SRS Media Server (on_publish) to validate stream keys
 // @Tags         Livestream
-// @Accept       x-www-form-urlencoded
-// @Produce      plain
-// @Param        name formData string true "Stream key"
-// @Success      200 {string} string "OK"
-// @Failure      403 {string} string "invalid stream key"
+// @Accept       json
+// @Produce      json
+// @Param        stream formData string true "Stream key"
+// @Success      200 {object} map[string]int
+// @Failure      403 {object} map[string]int
 // @Router       /v1/live/auth [post]
 func (r *V1) authenticateRTMPStreamKey(ctx *fiber.Ctx) error {
 	var body request.StreamKeyAuth
@@ -187,14 +196,39 @@ func (r *V1) authenticateRTMPStreamKey(ctx *fiber.Ctx) error {
 	}
 
 	if body.StreamKey == "" {
-		return ctx.Status(http.StatusForbidden).SendString("stream key required")
+		return ctx.Status(http.StatusForbidden).JSON(srsHookRejected)
 	}
 
 	ok, err := r.ls.AuthenticateStreamKey(ctx.UserContext(), body)
 	if err != nil || !ok {
 		r.l.Error(err, "restapi - v1 - authenticateRTMPStreamKey")
-		return ctx.Status(http.StatusForbidden).SendString("invalid stream key")
+		return ctx.Status(http.StatusForbidden).JSON(srsHookRejected)
 	}
 
-	return ctx.Status(http.StatusOK).SendString("OK")
+	return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
+}
+
+// @Summary      RTMP Unpublish Webhook
+// @Description  Webhook used by SRS Media Server (on_unpublish) when a streamer disconnects
+// @Tags         Livestream
+// @Accept       json
+// @Produce      json
+// @Param        stream formData string true "Stream key"
+// @Success      200 {object} map[string]int
+// @Router       /v1/live/unpublish [post]
+func (r *V1) unpublishRTMPStream(ctx *fiber.Ctx) error {
+	var body request.StreamKeyAuth
+	if err := ctx.BodyParser(&body); err != nil {
+		body.StreamKey = ctx.FormValue("name")
+	}
+
+	if body.StreamKey == "" {
+		return ctx.Status(http.StatusOK).JSON(srsHookAccepted) // nothing to do, but still ack the callback
+	}
+
+	if err := r.ls.UnpublishStream(ctx.UserContext(), body.StreamKey); err != nil {
+		r.l.Error(err, "restapi - v1 - unpublishRTMPStream")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
 }

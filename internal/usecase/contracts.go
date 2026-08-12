@@ -55,6 +55,7 @@ type (
 		GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)
 		ResetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)
 		AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error)
+		UnpublishStream(ctx context.Context, streamKey string) error
 		GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error)
 		ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error)
 		UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error)

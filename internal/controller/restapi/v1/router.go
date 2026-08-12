@@ -42,7 +42,8 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		livePublicGroup.Get("/streams/:id", r.getStream)
 		livePublicGroup.Post("/streams/:id/chat", r.sendChatMessage)
 		livePublicGroup.Post("/streams/:id/heart", r.heartStream)
-		livePublicGroup.Post("/auth", r.authenticateRTMPStreamKey) // Internal Webhook for SRS
+		livePublicGroup.Post("/auth", r.authenticateRTMPStreamKey)      // Internal Webhook for SRS on_publish
+		livePublicGroup.Post("/unpublish", r.unpublishRTMPStream)       // Internal Webhook for SRS on_unpublish
 	}
 
 	// Protected routes
