@@ -59,6 +59,7 @@ type (
 	VideoFilter struct {
 		UserID     string
 		Category   string
+		Query      string
 		Status     *entity.VideoStatus
 		Visibility *entity.VideoVisibility
 		Limit      uint64

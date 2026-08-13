@@ -41,7 +41,7 @@ type (
 		CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error)
 		ConfirmUpload(ctx context.Context, userID string, req request.ConfirmUpload) (response.VideoResponse, error)
 		GetByID(ctx context.Context, id string) (response.VideoResponse, error)
-		ListPublicVideos(ctx context.Context, userID, category string, page, limit int) (response.PageResponse[response.VideoResponse], error)
+		ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		ListStudioVideos(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		PublishVideo(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error)

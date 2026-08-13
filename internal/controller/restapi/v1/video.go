@@ -40,10 +40,14 @@ func (r *V1) listPublicVideos(ctx *fiber.Ctx) error {
 	if userID == "" {
 		userID = ctx.Query("creator_id")
 	}
+	query := ctx.Query("q")
+	if query == "" {
+		query = ctx.Query("query")
+	}
 	page := ctx.QueryInt("page", 1)
 	limit := ctx.QueryInt("limit", 10)
 
-	pageDTO, err := r.vd.ListPublicVideos(ctx.UserContext(), userID, category, page, limit)
+	pageDTO, err := r.vd.ListPublicVideos(ctx.UserContext(), userID, category, query, page, limit)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - listPublicVideos")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to list public videos")

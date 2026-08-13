@@ -187,7 +187,7 @@ func (r *V1) getChannelDetails(ctx *fiber.Ctx) error {
 		})
 	}
 
-	vids, err := r.vd.ListPublicVideos(ctx.UserContext(), user.ID, "", 1, 100)
+	vids, err := r.vd.ListPublicVideos(ctx.UserContext(), user.ID, "", "", 1, 100)
 	var totalViews int64 = 0
 	total := 0
 	if err == nil {

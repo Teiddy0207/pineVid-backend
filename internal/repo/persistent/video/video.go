@@ -63,13 +63,22 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 }
 
 func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Video, int, error) {
-	countBuilder := r.Builder.Select("COUNT(*)").From("videos v")
+	countBuilder := r.Builder.Select("COUNT(*)").From("videos v").LeftJoin("users u ON v.user_id::text = u.id::text")
 
 	if filter.UserID != "" {
 		countBuilder = countBuilder.Where(sq.Eq{"v.user_id": filter.UserID})
 	}
 	if filter.Category != "" {
 		countBuilder = countBuilder.Where(sq.Eq{"v.category": filter.Category})
+	}
+	if filter.Query != "" {
+		pat := "%" + filter.Query + "%"
+		countBuilder = countBuilder.Where(sq.Or{
+			sq.ILike{"v.title": pat},
+			sq.ILike{"v.description": pat},
+			sq.ILike{"v.category": pat},
+			sq.ILike{"u.username": pat},
+		})
 	}
 	if filter.Status != nil {
 		countBuilder = countBuilder.Where(sq.Eq{"v.status": *filter.Status})
@@ -102,6 +111,15 @@ func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Vide
 	}
 	if filter.Category != "" {
 		dataBuilder = dataBuilder.Where(sq.Eq{"v.category": filter.Category})
+	}
+	if filter.Query != "" {
+		pat := "%" + filter.Query + "%"
+		dataBuilder = dataBuilder.Where(sq.Or{
+			sq.ILike{"v.title": pat},
+			sq.ILike{"v.description": pat},
+			sq.ILike{"v.category": pat},
+			sq.ILike{"u.username": pat},
+		})
 	}
 	if filter.Status != nil {
 		dataBuilder = dataBuilder.Where(sq.Eq{"v.status": *filter.Status})
