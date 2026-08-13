@@ -95,12 +95,13 @@ func (u *UseCase) GetByID(ctx context.Context, id string) (response.VideoRespons
 	return mapper.ToVideoResponse(v), nil
 }
 
-func (u *UseCase) ListPublicVideos(ctx context.Context, category string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+func (u *UseCase) ListPublicVideos(ctx context.Context, userID, category string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
 	offset := (page - 1) * limit
 	status := entity.VideoStatusComplete
 	visibility := entity.VideoVisibilityPublic
 
 	filter := repo.VideoFilter{
+		UserID:     userID,
 		Category:   category,
 		Status:     &status,
 		Visibility: &visibility,

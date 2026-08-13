@@ -32,6 +32,11 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		videosPublicGroup.Get("/:id/comments", r.listVideoComments)
 	}
 
+	channelsPublicGroup := apiV1Group.Group("/channels")
+	{
+		channelsPublicGroup.Get("/:id", r.getChannelDetails)
+	}
+
 	apiV1Group.Post("/transcode/callback", r.transcodeCallback)
 	apiV1Group.Get("/events/videos", r.sseVideoEvents)
 	apiV1Group.Get("/events/chat/:id", r.sseChatEvents)

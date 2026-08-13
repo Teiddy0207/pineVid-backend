@@ -108,6 +108,10 @@ migrate-up: ### migration up
 	migrate -path migrations -database '$(PG_URL)?sslmode=disable' up
 .PHONY: migrate-up
 
+seed-demo: ### seed demo data (30 creators/90 videos across 6 categories + 70 viewers with realistic interactions). Optionally set SEED_TARGET_EMAIL to also seed "favorite channels" for a real account.
+	psql '$(PG_URL)?sslmode=disable' -v target_email='$(SEED_TARGET_EMAIL)' -f scripts/seed_demo_data.sql
+.PHONY: seed-demo
+
 bin-deps: ### install tools
 	go install tool
 	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate

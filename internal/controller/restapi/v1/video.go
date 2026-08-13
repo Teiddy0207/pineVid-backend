@@ -36,10 +36,14 @@ func getUserID(ctx *fiber.Ctx) string {
 // @Router       /v1/videos [get]
 func (r *V1) listPublicVideos(ctx *fiber.Ctx) error {
 	category := ctx.Query("category")
+	userID := ctx.Query("user_id")
+	if userID == "" {
+		userID = ctx.Query("creator_id")
+	}
 	page := ctx.QueryInt("page", 1)
 	limit := ctx.QueryInt("limit", 10)
 
-	pageDTO, err := r.vd.ListPublicVideos(ctx.UserContext(), category, page, limit)
+	pageDTO, err := r.vd.ListPublicVideos(ctx.UserContext(), userID, category, page, limit)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - listPublicVideos")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to list public videos")

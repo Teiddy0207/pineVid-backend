@@ -58,6 +58,11 @@ func (r *Repo) GetByEmail(ctx context.Context, email string) (entity.User, error
 	return r.getUser(ctx, "email", email)
 }
 
+// GetByUsername -.
+func (r *Repo) GetByUsername(ctx context.Context, username string) (entity.User, error) {
+	return r.getUser(ctx, "username", username)
+}
+
 func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, error) {
 	sql, args, err := r.Builder.
 		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, created_at, updated_at").

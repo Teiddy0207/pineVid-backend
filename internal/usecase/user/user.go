@@ -76,11 +76,16 @@ func (uc *UseCase) Login(ctx context.Context, email, password string) (string, e
 // GetUser -.
 func (uc *UseCase) GetUser(ctx context.Context, userID string) (entity.User, error) {
 	user, err := uc.repo.GetByID(ctx, userID)
-	if err != nil {
-		return entity.User{}, fmt.Errorf("UserUseCase - GetUser - uc.repo.GetByID: %w", err)
+	if err == nil {
+		return user, nil
 	}
 
-	return user, nil
+	userByUsername, errUsername := uc.repo.GetByUsername(ctx, userID)
+	if errUsername == nil {
+		return userByUsername, nil
+	}
+
+	return entity.User{}, fmt.Errorf("UserUseCase - GetUser: %w", err)
 }
 
 // UpdateUser persists changes to username, email, and avatar for the given user.

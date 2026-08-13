@@ -3,6 +3,7 @@ package recommendation
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
@@ -128,6 +129,11 @@ func (u *UseCase) train(ctx context.Context) error {
 			}
 
 			errVal := rating - pred
+			// With very few users/videos (e.g. a single user with a handful
+			// of interactions), unclamped SGD can overshoot and blow up to
+			// +/-Inf over many epochs; clamp the error term so updates stay
+			// bounded instead of ever reaching Inf/NaN.
+			errVal = clampFloat(errVal, -maxSGDError, maxSGDError)
 
 			// Update latent factors
 			for f := 0; f < k; f++ {
@@ -138,6 +144,14 @@ func (u *UseCase) train(ctx context.Context) error {
 				Q[vIdx][f] += u.gamma * (errVal*pOld - u.lambda*qOld)
 			}
 		}
+	}
+
+	if !allFinite(P) || !allFinite(Q) {
+		// Training diverged (shouldn't happen with the clamp above, but this
+		// is cheap insurance): keep serving whatever was cached before rather
+		// than publishing vectors that would make every response 500 with
+		// "json: unsupported value: NaN".
+		return fmt.Errorf("RecommendationUseCase - train: model diverged (non-finite values), keeping previous cache")
 	}
 
 	// 3. Publish the trained vectors keyed by real ID, so serving can look up
@@ -158,6 +172,29 @@ func (u *UseCase) train(ctx context.Context) error {
 	u.mu.Unlock()
 
 	return nil
+}
+
+const maxSGDError = 50.0
+
+func clampFloat(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func allFinite(matrix [][]float64) bool {
+	for _, row := range matrix {
+		for _, v := range row {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // GetPersonalizedFeed returns top-ranked videos for a user, reading whatever
@@ -195,7 +232,11 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 				for f := 0; f < u.factors; f++ {
 					pred += userFactors[f] * videoFactors[f]
 				}
-				score += pred
+				// Defense in depth: never let a single non-finite value (from
+				// a future/edge-case model) poison the whole JSON response.
+				if !math.IsNaN(pred) && !math.IsInf(pred, 0) {
+					score += pred
+				}
 			}
 		}
 		recs = append(recs, entity.RecommendedVideo{Video: v, PredictedScore: score})
