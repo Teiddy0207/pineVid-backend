@@ -9,6 +9,7 @@ type User struct {
 	Email        string    `json:"email"       example:"john@example.com"`
 	Avatar       string    `json:"avatar"      example:"http://localhost:9000/raw-videos/avatar.jpg"`
 	PasswordHash string    `json:"-"`
+	IsBanned     bool      `json:"is_banned"`
 	CreatedAt    time.Time `json:"created_at"  example:"2026-01-01T00:00:00Z"`
 	UpdatedAt    time.Time `json:"updated_at"  example:"2026-01-01T00:00:00Z"`
 } // @name entity.User

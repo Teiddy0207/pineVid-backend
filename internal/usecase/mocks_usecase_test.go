@@ -13,6 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	request "github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
+	response "github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	entity "github.com/evrone/go-clean-template/internal/entity"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -140,6 +142,21 @@ func (mr *MockUserMockRecorder) Register(ctx, username, email, password any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockUser)(nil).Register), ctx, username, email, password)
 }
 
+// UpdateUser mocks base method.
+func (m *MockUser) UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUser", ctx, userID, username, email, avatar)
+	ret0, _ := ret[0].(entity.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateUser indicates an expected call of UpdateUser.
+func (mr *MockUserMockRecorder) UpdateUser(ctx, userID, username, email, avatar any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUser", reflect.TypeOf((*MockUser)(nil).UpdateUser), ctx, userID, username, email, avatar)
+}
+
 // MockTask is a mock of Task interface.
 type MockTask struct {
 	ctrl     *gomock.Controller
@@ -252,4 +269,759 @@ func (m *MockTask) Update(ctx context.Context, userID, taskID, title, descriptio
 func (mr *MockTaskMockRecorder) Update(ctx, userID, taskID, title, description any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockTask)(nil).Update), ctx, userID, taskID, title, description)
+}
+
+// MockVideo is a mock of Video interface.
+type MockVideo struct {
+	ctrl     *gomock.Controller
+	recorder *MockVideoMockRecorder
+	isgomock struct{}
+}
+
+// MockVideoMockRecorder is the mock recorder for MockVideo.
+type MockVideoMockRecorder struct {
+	mock *MockVideo
+}
+
+// NewMockVideo creates a new mock instance.
+func NewMockVideo(ctrl *gomock.Controller) *MockVideo {
+	mock := &MockVideo{ctrl: ctrl}
+	mock.recorder = &MockVideoMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockVideo) EXPECT() *MockVideoMockRecorder {
+	return m.recorder
+}
+
+// ConfirmUpload mocks base method.
+func (m *MockVideo) ConfirmUpload(ctx context.Context, userID string, req request.ConfirmUpload) (response.VideoResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConfirmUpload", ctx, userID, req)
+	ret0, _ := ret[0].(response.VideoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConfirmUpload indicates an expected call of ConfirmUpload.
+func (mr *MockVideoMockRecorder) ConfirmUpload(ctx, userID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfirmUpload", reflect.TypeOf((*MockVideo)(nil).ConfirmUpload), ctx, userID, req)
+}
+
+// CreateUpload mocks base method.
+func (m *MockVideo) CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUpload", ctx, userID, req)
+	ret0, _ := ret[0].(response.UploadUrlResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateUpload indicates an expected call of CreateUpload.
+func (mr *MockVideoMockRecorder) CreateUpload(ctx, userID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUpload", reflect.TypeOf((*MockVideo)(nil).CreateUpload), ctx, userID, req)
+}
+
+// DeleteVideo mocks base method.
+func (m *MockVideo) DeleteVideo(ctx context.Context, userID, videoID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteVideo", ctx, userID, videoID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteVideo indicates an expected call of DeleteVideo.
+func (mr *MockVideoMockRecorder) DeleteVideo(ctx, userID, videoID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVideo", reflect.TypeOf((*MockVideo)(nil).DeleteVideo), ctx, userID, videoID)
+}
+
+// GetByID mocks base method.
+func (m *MockVideo) GetByID(ctx context.Context, id string) (response.VideoResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByID", ctx, id)
+	ret0, _ := ret[0].(response.VideoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByID indicates an expected call of GetByID.
+func (mr *MockVideoMockRecorder) GetByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByID", reflect.TypeOf((*MockVideo)(nil).GetByID), ctx, id)
+}
+
+// HandleTranscodeCallback mocks base method.
+func (m *MockVideo) HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleTranscodeCallback", ctx, videoID, status, hlsMasterURL)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleTranscodeCallback indicates an expected call of HandleTranscodeCallback.
+func (mr *MockVideoMockRecorder) HandleTranscodeCallback(ctx, videoID, status, hlsMasterURL any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTranscodeCallback", reflect.TypeOf((*MockVideo)(nil).HandleTranscodeCallback), ctx, videoID, status, hlsMasterURL)
+}
+
+// ListPublicVideos mocks base method.
+func (m *MockVideo) ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPublicVideos", ctx, userID, category, query, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.VideoResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPublicVideos indicates an expected call of ListPublicVideos.
+func (mr *MockVideoMockRecorder) ListPublicVideos(ctx, userID, category, query, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicVideos", reflect.TypeOf((*MockVideo)(nil).ListPublicVideos), ctx, userID, category, query, page, limit)
+}
+
+// ListStudioVideos mocks base method.
+func (m *MockVideo) ListStudioVideos(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListStudioVideos", ctx, userID, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.VideoResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStudioVideos indicates an expected call of ListStudioVideos.
+func (mr *MockVideoMockRecorder) ListStudioVideos(ctx, userID, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStudioVideos", reflect.TypeOf((*MockVideo)(nil).ListStudioVideos), ctx, userID, page, limit)
+}
+
+// PublishVideo mocks base method.
+func (m *MockVideo) PublishVideo(ctx context.Context, userID, videoID string) (response.VideoResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PublishVideo", ctx, userID, videoID)
+	ret0, _ := ret[0].(response.VideoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PublishVideo indicates an expected call of PublishVideo.
+func (mr *MockVideoMockRecorder) PublishVideo(ctx, userID, videoID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishVideo", reflect.TypeOf((*MockVideo)(nil).PublishVideo), ctx, userID, videoID)
+}
+
+// RecordView mocks base method.
+func (m *MockVideo) RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordView", ctx, videoID, clientIP, deviceID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// RecordView indicates an expected call of RecordView.
+func (mr *MockVideoMockRecorder) RecordView(ctx, videoID, clientIP, deviceID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordView", reflect.TypeOf((*MockVideo)(nil).RecordView), ctx, videoID, clientIP, deviceID)
+}
+
+// UpdateVideo mocks base method.
+func (m *MockVideo) UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateVideo", ctx, userID, videoID, req)
+	ret0, _ := ret[0].(response.VideoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateVideo indicates an expected call of UpdateVideo.
+func (mr *MockVideoMockRecorder) UpdateVideo(ctx, userID, videoID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateVideo", reflect.TypeOf((*MockVideo)(nil).UpdateVideo), ctx, userID, videoID, req)
+}
+
+// MockLivestream is a mock of Livestream interface.
+type MockLivestream struct {
+	ctrl     *gomock.Controller
+	recorder *MockLivestreamMockRecorder
+	isgomock struct{}
+}
+
+// MockLivestreamMockRecorder is the mock recorder for MockLivestream.
+type MockLivestreamMockRecorder struct {
+	mock *MockLivestream
+}
+
+// NewMockLivestream creates a new mock instance.
+func NewMockLivestream(ctrl *gomock.Controller) *MockLivestream {
+	mock := &MockLivestream{ctrl: ctrl}
+	mock.recorder = &MockLivestreamMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLivestream) EXPECT() *MockLivestreamMockRecorder {
+	return m.recorder
+}
+
+// AuthenticateStreamKey mocks base method.
+func (m *MockLivestream) AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthenticateStreamKey", ctx, req)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthenticateStreamKey indicates an expected call of AuthenticateStreamKey.
+func (mr *MockLivestreamMockRecorder) AuthenticateStreamKey(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateStreamKey", reflect.TypeOf((*MockLivestream)(nil).AuthenticateStreamKey), ctx, req)
+}
+
+// GetStreamByID mocks base method.
+func (m *MockLivestream) GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStreamByID", ctx, id)
+	ret0, _ := ret[0].(response.LivestreamResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStreamByID indicates an expected call of GetStreamByID.
+func (mr *MockLivestreamMockRecorder) GetStreamByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamByID", reflect.TypeOf((*MockLivestream)(nil).GetStreamByID), ctx, id)
+}
+
+// GetStreamKey mocks base method.
+func (m *MockLivestream) GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStreamKey", ctx, userID)
+	ret0, _ := ret[0].(response.StreamKeyResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStreamKey indicates an expected call of GetStreamKey.
+func (mr *MockLivestreamMockRecorder) GetStreamKey(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamKey", reflect.TypeOf((*MockLivestream)(nil).GetStreamKey), ctx, userID)
+}
+
+// ListActiveStreams mocks base method.
+func (m *MockLivestream) ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveStreams", ctx, category, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.LivestreamResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveStreams indicates an expected call of ListActiveStreams.
+func (mr *MockLivestreamMockRecorder) ListActiveStreams(ctx, category, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveStreams", reflect.TypeOf((*MockLivestream)(nil).ListActiveStreams), ctx, category, page, limit)
+}
+
+// ResetStreamKey mocks base method.
+func (m *MockLivestream) ResetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetStreamKey", ctx, userID)
+	ret0, _ := ret[0].(response.StreamKeyResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetStreamKey indicates an expected call of ResetStreamKey.
+func (mr *MockLivestreamMockRecorder) ResetStreamKey(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetStreamKey", reflect.TypeOf((*MockLivestream)(nil).ResetStreamKey), ctx, userID)
+}
+
+// SendChatMessage mocks base method.
+func (m *MockLivestream) SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendChatMessage", ctx, streamID, req)
+	ret0, _ := ret[0].(response.ChatMessageResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SendChatMessage indicates an expected call of SendChatMessage.
+func (mr *MockLivestreamMockRecorder) SendChatMessage(ctx, streamID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendChatMessage", reflect.TypeOf((*MockLivestream)(nil).SendChatMessage), ctx, streamID, req)
+}
+
+// SubscribeChat mocks base method.
+func (m *MockLivestream) SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeChat", streamID)
+	ret0, _ := ret[0].(<-chan response.ChatMessageResponse)
+	ret1, _ := ret[1].(func())
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// SubscribeChat indicates an expected call of SubscribeChat.
+func (mr *MockLivestreamMockRecorder) SubscribeChat(streamID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeChat", reflect.TypeOf((*MockLivestream)(nil).SubscribeChat), streamID)
+}
+
+// UnpublishStream mocks base method.
+func (m *MockLivestream) UnpublishStream(ctx context.Context, streamKey string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpublishStream", ctx, streamKey)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnpublishStream indicates an expected call of UnpublishStream.
+func (mr *MockLivestreamMockRecorder) UnpublishStream(ctx, streamKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpublishStream", reflect.TypeOf((*MockLivestream)(nil).UnpublishStream), ctx, streamKey)
+}
+
+// UpdateStreamInfo mocks base method.
+func (m *MockLivestream) UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateStreamInfo", ctx, userID, req)
+	ret0, _ := ret[0].(response.LivestreamResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateStreamInfo indicates an expected call of UpdateStreamInfo.
+func (mr *MockLivestreamMockRecorder) UpdateStreamInfo(ctx, userID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStreamInfo", reflect.TypeOf((*MockLivestream)(nil).UpdateStreamInfo), ctx, userID, req)
+}
+
+// MockFollow is a mock of Follow interface.
+type MockFollow struct {
+	ctrl     *gomock.Controller
+	recorder *MockFollowMockRecorder
+	isgomock struct{}
+}
+
+// MockFollowMockRecorder is the mock recorder for MockFollow.
+type MockFollowMockRecorder struct {
+	mock *MockFollow
+}
+
+// NewMockFollow creates a new mock instance.
+func NewMockFollow(ctrl *gomock.Controller) *MockFollow {
+	mock := &MockFollow{ctrl: ctrl}
+	mock.recorder = &MockFollowMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFollow) EXPECT() *MockFollowMockRecorder {
+	return m.recorder
+}
+
+// CountFollowers mocks base method.
+func (m *MockFollow) CountFollowers(ctx context.Context, channelID string) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountFollowers", ctx, channelID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountFollowers indicates an expected call of CountFollowers.
+func (mr *MockFollowMockRecorder) CountFollowers(ctx, channelID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountFollowers", reflect.TypeOf((*MockFollow)(nil).CountFollowers), ctx, channelID)
+}
+
+// IsFollowing mocks base method.
+func (m *MockFollow) IsFollowing(ctx context.Context, followerID, channelID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsFollowing", ctx, followerID, channelID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsFollowing indicates an expected call of IsFollowing.
+func (mr *MockFollowMockRecorder) IsFollowing(ctx, followerID, channelID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsFollowing", reflect.TypeOf((*MockFollow)(nil).IsFollowing), ctx, followerID, channelID)
+}
+
+// ListFollowedChannels mocks base method.
+func (m *MockFollow) ListFollowedChannels(ctx context.Context, followerID string, page, limit int) (response.PageResponse[response.ChannelSummary], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListFollowedChannels", ctx, followerID, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.ChannelSummary])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListFollowedChannels indicates an expected call of ListFollowedChannels.
+func (mr *MockFollowMockRecorder) ListFollowedChannels(ctx, followerID, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFollowedChannels", reflect.TypeOf((*MockFollow)(nil).ListFollowedChannels), ctx, followerID, page, limit)
+}
+
+// ToggleFollow mocks base method.
+func (m *MockFollow) ToggleFollow(ctx context.Context, followerID, channelID string) (response.FollowToggleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ToggleFollow", ctx, followerID, channelID)
+	ret0, _ := ret[0].(response.FollowToggleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ToggleFollow indicates an expected call of ToggleFollow.
+func (mr *MockFollowMockRecorder) ToggleFollow(ctx, followerID, channelID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToggleFollow", reflect.TypeOf((*MockFollow)(nil).ToggleFollow), ctx, followerID, channelID)
+}
+
+// MockHistory is a mock of History interface.
+type MockHistory struct {
+	ctrl     *gomock.Controller
+	recorder *MockHistoryMockRecorder
+	isgomock struct{}
+}
+
+// MockHistoryMockRecorder is the mock recorder for MockHistory.
+type MockHistoryMockRecorder struct {
+	mock *MockHistory
+}
+
+// NewMockHistory creates a new mock instance.
+func NewMockHistory(ctrl *gomock.Controller) *MockHistory {
+	mock := &MockHistory{ctrl: ctrl}
+	mock.recorder = &MockHistoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHistory) EXPECT() *MockHistoryMockRecorder {
+	return m.recorder
+}
+
+// ListHistory mocks base method.
+func (m *MockHistory) ListHistory(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListHistory", ctx, userID, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.VideoResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListHistory indicates an expected call of ListHistory.
+func (mr *MockHistoryMockRecorder) ListHistory(ctx, userID, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHistory", reflect.TypeOf((*MockHistory)(nil).ListHistory), ctx, userID, page, limit)
+}
+
+// RecordWatch mocks base method.
+func (m *MockHistory) RecordWatch(ctx context.Context, userID, videoID string, watchSeconds int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordWatch", ctx, userID, videoID, watchSeconds)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordWatch indicates an expected call of RecordWatch.
+func (mr *MockHistoryMockRecorder) RecordWatch(ctx, userID, videoID, watchSeconds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWatch", reflect.TypeOf((*MockHistory)(nil).RecordWatch), ctx, userID, videoID, watchSeconds)
+}
+
+// MockAdmin is a mock of Admin interface.
+type MockAdmin struct {
+	ctrl     *gomock.Controller
+	recorder *MockAdminMockRecorder
+	isgomock struct{}
+}
+
+// MockAdminMockRecorder is the mock recorder for MockAdmin.
+type MockAdminMockRecorder struct {
+	mock *MockAdmin
+}
+
+// NewMockAdmin creates a new mock instance.
+func NewMockAdmin(ctrl *gomock.Controller) *MockAdmin {
+	mock := &MockAdmin{ctrl: ctrl}
+	mock.recorder = &MockAdminMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAdmin) EXPECT() *MockAdminMockRecorder {
+	return m.recorder
+}
+
+// BanStream mocks base method.
+func (m *MockAdmin) BanStream(ctx context.Context, streamID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BanStream", ctx, streamID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BanStream indicates an expected call of BanStream.
+func (mr *MockAdminMockRecorder) BanStream(ctx, streamID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BanStream", reflect.TypeOf((*MockAdmin)(nil).BanStream), ctx, streamID)
+}
+
+// BanUser mocks base method.
+func (m *MockAdmin) BanUser(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BanUser", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BanUser indicates an expected call of BanUser.
+func (mr *MockAdminMockRecorder) BanUser(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BanUser", reflect.TypeOf((*MockAdmin)(nil).BanUser), ctx, userID)
+}
+
+// BanVideo mocks base method.
+func (m *MockAdmin) BanVideo(ctx context.Context, videoID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BanVideo", ctx, videoID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BanVideo indicates an expected call of BanVideo.
+func (mr *MockAdminMockRecorder) BanVideo(ctx, videoID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BanVideo", reflect.TypeOf((*MockAdmin)(nil).BanVideo), ctx, videoID)
+}
+
+// GetDashboard mocks base method.
+func (m *MockAdmin) GetDashboard(ctx context.Context) (response.SystemDashboardResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDashboard", ctx)
+	ret0, _ := ret[0].(response.SystemDashboardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDashboard indicates an expected call of GetDashboard.
+func (mr *MockAdminMockRecorder) GetDashboard(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDashboard", reflect.TypeOf((*MockAdmin)(nil).GetDashboard), ctx)
+}
+
+// GetWorkersStatus mocks base method.
+func (m *MockAdmin) GetWorkersStatus(ctx context.Context) ([]response.WorkerStatusResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkersStatus", ctx)
+	ret0, _ := ret[0].([]response.WorkerStatusResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkersStatus indicates an expected call of GetWorkersStatus.
+func (mr *MockAdminMockRecorder) GetWorkersStatus(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkersStatus", reflect.TypeOf((*MockAdmin)(nil).GetWorkersStatus), ctx)
+}
+
+// ListUsers mocks base method.
+func (m *MockAdmin) ListUsers(ctx context.Context, page, limit int) (response.PageResponse[response.UserResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListUsers", ctx, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.UserResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListUsers indicates an expected call of ListUsers.
+func (mr *MockAdminMockRecorder) ListUsers(ctx, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUsers", reflect.TypeOf((*MockAdmin)(nil).ListUsers), ctx, page, limit)
+}
+
+// RecordHeartbeat mocks base method.
+func (m *MockAdmin) RecordHeartbeat(ctx context.Context, hb entity.WorkerHeartbeat) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordHeartbeat", ctx, hb)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordHeartbeat indicates an expected call of RecordHeartbeat.
+func (mr *MockAdminMockRecorder) RecordHeartbeat(ctx, hb any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordHeartbeat", reflect.TypeOf((*MockAdmin)(nil).RecordHeartbeat), ctx, hb)
+}
+
+// UnbanUser mocks base method.
+func (m *MockAdmin) UnbanUser(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnbanUser", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnbanUser indicates an expected call of UnbanUser.
+func (mr *MockAdminMockRecorder) UnbanUser(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnbanUser", reflect.TypeOf((*MockAdmin)(nil).UnbanUser), ctx, userID)
+}
+
+// MockLike is a mock of Like interface.
+type MockLike struct {
+	ctrl     *gomock.Controller
+	recorder *MockLikeMockRecorder
+	isgomock struct{}
+}
+
+// MockLikeMockRecorder is the mock recorder for MockLike.
+type MockLikeMockRecorder struct {
+	mock *MockLike
+}
+
+// NewMockLike creates a new mock instance.
+func NewMockLike(ctrl *gomock.Controller) *MockLike {
+	mock := &MockLike{ctrl: ctrl}
+	mock.recorder = &MockLikeMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLike) EXPECT() *MockLikeMockRecorder {
+	return m.recorder
+}
+
+// HeartStream mocks base method.
+func (m *MockLike) HeartStream(ctx context.Context, streamID string) (response.HeartResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HeartStream", ctx, streamID)
+	ret0, _ := ret[0].(response.HeartResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HeartStream indicates an expected call of HeartStream.
+func (mr *MockLikeMockRecorder) HeartStream(ctx, streamID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeartStream", reflect.TypeOf((*MockLike)(nil).HeartStream), ctx, streamID)
+}
+
+// ToggleLikeVideo mocks base method.
+func (m *MockLike) ToggleLikeVideo(ctx context.Context, userID, videoID string) (response.LikeResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ToggleLikeVideo", ctx, userID, videoID)
+	ret0, _ := ret[0].(response.LikeResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ToggleLikeVideo indicates an expected call of ToggleLikeVideo.
+func (mr *MockLikeMockRecorder) ToggleLikeVideo(ctx, userID, videoID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToggleLikeVideo", reflect.TypeOf((*MockLike)(nil).ToggleLikeVideo), ctx, userID, videoID)
+}
+
+// MockComment is a mock of Comment interface.
+type MockComment struct {
+	ctrl     *gomock.Controller
+	recorder *MockCommentMockRecorder
+	isgomock struct{}
+}
+
+// MockCommentMockRecorder is the mock recorder for MockComment.
+type MockCommentMockRecorder struct {
+	mock *MockComment
+}
+
+// NewMockComment creates a new mock instance.
+func NewMockComment(ctrl *gomock.Controller) *MockComment {
+	mock := &MockComment{ctrl: ctrl}
+	mock.recorder = &MockCommentMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockComment) EXPECT() *MockCommentMockRecorder {
+	return m.recorder
+}
+
+// CreateComment mocks base method.
+func (m *MockComment) CreateComment(ctx context.Context, videoID, userID, userName, userAvatar string, req request.CreateCommentRequest) (response.CommentResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateComment", ctx, videoID, userID, userName, userAvatar, req)
+	ret0, _ := ret[0].(response.CommentResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateComment indicates an expected call of CreateComment.
+func (mr *MockCommentMockRecorder) CreateComment(ctx, videoID, userID, userName, userAvatar, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateComment", reflect.TypeOf((*MockComment)(nil).CreateComment), ctx, videoID, userID, userName, userAvatar, req)
+}
+
+// ListVideoComments mocks base method.
+func (m *MockComment) ListVideoComments(ctx context.Context, videoID string, page, limit int) (response.PageResponse[response.CommentResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListVideoComments", ctx, videoID, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.CommentResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListVideoComments indicates an expected call of ListVideoComments.
+func (mr *MockCommentMockRecorder) ListVideoComments(ctx, videoID, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListVideoComments", reflect.TypeOf((*MockComment)(nil).ListVideoComments), ctx, videoID, page, limit)
+}
+
+// MockRecommendation is a mock of Recommendation interface.
+type MockRecommendation struct {
+	ctrl     *gomock.Controller
+	recorder *MockRecommendationMockRecorder
+	isgomock struct{}
+}
+
+// MockRecommendationMockRecorder is the mock recorder for MockRecommendation.
+type MockRecommendationMockRecorder struct {
+	mock *MockRecommendation
+}
+
+// NewMockRecommendation creates a new mock instance.
+func NewMockRecommendation(ctrl *gomock.Controller) *MockRecommendation {
+	mock := &MockRecommendation{ctrl: ctrl}
+	mock.recorder = &MockRecommendationMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRecommendation) EXPECT() *MockRecommendationMockRecorder {
+	return m.recorder
+}
+
+// GetPersonalizedFeed mocks base method.
+func (m *MockRecommendation) GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPersonalizedFeed", ctx, userID, page, limit)
+	ret0, _ := ret[0].(response.PageResponse[response.RecommendedVideoItem])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPersonalizedFeed indicates an expected call of GetPersonalizedFeed.
+func (mr *MockRecommendationMockRecorder) GetPersonalizedFeed(ctx, userID, page, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPersonalizedFeed", reflect.TypeOf((*MockRecommendation)(nil).GetPersonalizedFeed), ctx, userID, page, limit)
 }

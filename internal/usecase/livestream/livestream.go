@@ -16,12 +16,13 @@ import (
 )
 
 type UseCase struct {
-	repo    repo.LivestreamRepo
-	chatHub *events.ChatHub
+	repo       repo.LivestreamRepo
+	videoRepo  repo.VideoRepo
+	chatHub    *events.ChatHub
 }
 
-func New(r repo.LivestreamRepo, chatHub *events.ChatHub) *UseCase {
-	return &UseCase{repo: r, chatHub: chatHub}
+func New(r repo.LivestreamRepo, vr repo.VideoRepo, chatHub *events.ChatHub) *UseCase {
+	return &UseCase{repo: r, videoRepo: vr, chatHub: chatHub}
 }
 
 func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error) {
@@ -109,7 +110,48 @@ func (u *UseCase) UnpublishStream(ctx context.Context, streamKey string) error {
 	ls.EndedAt = &now
 	ls.UpdatedAt = now
 
-	return u.repo.Update(ctx, &ls)
+	if err := u.repo.Update(ctx, &ls); err != nil {
+		return fmt.Errorf("LivestreamUseCase - UnpublishStream - Update: %w", err)
+	}
+
+	// Module 3 SRS Replay Saver Integration:
+	// Automatically save the recording of the finished livestream as a VOD draft video in VideoRepo
+	if u.videoRepo != nil {
+		var durationStr string
+		if ls.StartedAt != nil {
+			dur := now.Sub(*ls.StartedAt)
+			h := int(dur.Hours())
+			m := int(dur.Minutes()) % 60
+			s := int(dur.Seconds()) % 60
+			if h > 0 {
+				durationStr = fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+			} else {
+				durationStr = fmt.Sprintf("%02d:%02d", m, s)
+			}
+		} else {
+			durationStr = "00:00"
+		}
+
+		replayVideo := entity.Video{
+			ID:           uuid.New().String(),
+			UserID:       ls.UserID,
+			Title:        fmt.Sprintf("[Replay] %s", ls.Title),
+			Description:  fmt.Sprintf("Bản ghi hình phát trực tiếp ngày %s", now.Format("02/01/2006 15:04")),
+			Category:     ls.Category,
+			Status:       entity.VideoStatusComplete,
+			Visibility:   entity.VideoVisibilityPrivate, // Saved as Private draft for streamer to review
+			HLSUrl:       fmt.Sprintf("/vod-replays/%s/index.m3u8", ls.StreamKey),
+			RawS3Key:     fmt.Sprintf("vod-replays/%s/raw.flv", ls.StreamKey),
+			ThumbnailUrl: "",
+			Duration:     durationStr,
+			Views:        0,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		_ = u.videoRepo.Store(ctx, &replayVideo)
+	}
+
+	return nil
 }
 
 func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error) {

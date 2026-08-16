@@ -3,6 +3,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"github.com/evrone/go-clean-template/internal/entity"
 )
@@ -28,6 +29,7 @@ type (
 		GetByEmail(ctx context.Context, email string) (entity.User, error)
 		GetByUsername(ctx context.Context, username string) (entity.User, error)
 		Update(ctx context.Context, user *entity.User) error
+		List(ctx context.Context, page, limit int) ([]entity.User, int, error)
 	}
 
 	// TaskRepo -.
@@ -72,6 +74,15 @@ type (
 		ListByUser(ctx context.Context, userID string, limit, offset int) ([]entity.Video, int, error)
 	}
 
+	// FollowRepo -.
+	FollowRepo interface {
+		Follow(ctx context.Context, followerID, channelID string) error
+		Unfollow(ctx context.Context, followerID, channelID string) error
+		IsFollowing(ctx context.Context, followerID, channelID string) (bool, error)
+		CountFollowers(ctx context.Context, channelID string) (int64, error)
+		ListFollowedChannels(ctx context.Context, followerID string, page, limit int) ([]entity.User, int, error)
+	}
+
 	// LivestreamRepo -.
 	LivestreamRepo interface {
 		Store(ctx context.Context, ls *entity.Livestream) error
@@ -80,5 +91,21 @@ type (
 		GetByStreamKey(ctx context.Context, streamKey string) (entity.Livestream, error)
 		ListActive(ctx context.Context, category string, limit, offset int) ([]entity.Livestream, int, error)
 		Update(ctx context.Context, ls *entity.Livestream) error
+		CountActive(ctx context.Context) (int64, error)
+		SumActiveViewers(ctx context.Context) (int64, error)
+	}
+
+	// WorkerRepo -.
+	WorkerRepo interface {
+		UpsertHeartbeat(ctx context.Context, hb entity.WorkerHeartbeat) error
+		ListActive(ctx context.Context, staleAfter time.Duration) ([]entity.WorkerHeartbeat, error)
+	}
+
+	// NotificationRepo -.
+	NotificationRepo interface {
+		Store(ctx context.Context, notif *entity.Notification) error
+		ListByUserID(ctx context.Context, userID string, limit, offset int) ([]entity.Notification, int, error)
+		MarkAsRead(ctx context.Context, id, userID string) error
+		CountUnread(ctx context.Context, userID string) (int, error)
 	}
 )

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/evrone/go-clean-template/internal/usecase"
@@ -65,6 +66,10 @@ func (uc *UseCase) Login(ctx context.Context, email, password string) (string, e
 		return "", entity.ErrInvalidCredentials
 	}
 
+	if user.IsBanned {
+		return "", entity.ErrUserBanned
+	}
+
 	token, err := uc.jwt.GenerateToken(user.ID)
 	if err != nil {
 		return "", fmt.Errorf("UserUseCase - Login - uc.jwt.GenerateToken: %w", err)
@@ -112,4 +117,30 @@ func (uc *UseCase) UpdateUser(ctx context.Context, userID, username, email, avat
 
 	return user, nil
 }
+
+// RefreshToken validates a refresh token and generates a new access token
+func (uc *UseCase) RefreshToken(ctx context.Context, refreshToken string) (response.Token, error) {
+	userID, err := uc.jwt.ParseToken(refreshToken)
+	if err != nil {
+		return response.Token{}, entity.ErrInvalidCredentials
+	}
+
+	user, err := uc.repo.GetByID(ctx, userID)
+	if err != nil {
+		return response.Token{}, entity.ErrUserNotFound
+	}
+
+	if user.IsBanned {
+		return response.Token{}, entity.ErrUserBanned
+	}
+
+	newToken, err := uc.jwt.GenerateToken(user.ID)
+	if err != nil {
+		return response.Token{}, fmt.Errorf("UserUseCase - RefreshToken - uc.jwt.GenerateToken: %w", err)
+	}
+
+	return response.Token{Token: newToken}, nil
+}
+
+
 

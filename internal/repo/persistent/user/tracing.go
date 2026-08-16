@@ -80,3 +80,12 @@ func (r *tracedRepo) Update(ctx context.Context, user *entity.User) error {
 	return err
 }
 
+func (r *tracedRepo) List(ctx context.Context, page, limit int) ([]entity.User, int, error) {
+	ctx, span := startSpan(ctx, "UserRepo.List")
+
+	users, total, err := r.next.List(ctx, page, limit)
+	endSpan(span, err)
+
+	return users, total, err
+}
+

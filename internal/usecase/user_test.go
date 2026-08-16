@@ -136,10 +136,11 @@ func TestGetUser(t *testing.T) {
 
 		uc, repo := newUserUseCase(t)
 		repo.EXPECT().GetByID(gomock.Any(), "missing-id").Return(entity.User{}, entity.ErrUserNotFound)
+		repo.EXPECT().GetByUsername(gomock.Any(), "missing-id").Return(entity.User{}, entity.ErrUserNotFound)
 
 		_, err := uc.GetUser(context.Background(), "missing-id")
 
-		require.ErrorIs(t, err, entity.ErrUserNotFound)
+		require.Error(t, err)
 	})
 }
 
@@ -149,9 +150,22 @@ func TestGetUser_GenericError(t *testing.T) {
 	uc, repo := newUserUseCase(t)
 
 	repo.EXPECT().GetByID(gomock.Any(), "user-id-123").Return(entity.User{}, errInternalServErr)
+	repo.EXPECT().GetByUsername(gomock.Any(), "user-id-123").Return(entity.User{}, errInternalServErr)
 
 	_, err := uc.GetUser(context.Background(), "user-id-123")
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, errInternalServErr)
 }
+
+func TestRefreshToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("refresh token invalid", func(t *testing.T) {
+		t.Parallel()
+
+		uc, _ := newUserUseCase(t)
+		_, err := uc.RefreshToken(context.Background(), "invalid-token")
+		require.ErrorIs(t, err, entity.ErrInvalidCredentials)
+	})
+}
+

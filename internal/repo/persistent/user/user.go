@@ -65,7 +65,7 @@ func (r *Repo) GetByUsername(ctx context.Context, username string) (entity.User,
 
 func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, error) {
 	sql, args, err := r.Builder.
-		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, created_at, updated_at").
+		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, is_banned, created_at, updated_at").
 		From("users").
 		Where(sq.Eq{column: value}).
 		ToSql()
@@ -76,7 +76,7 @@ func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, 
 	var user entity.User
 
 	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&user.ID, &user.Username, &user.Email, &user.Avatar, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
+		Scan(&user.ID, &user.Username, &user.Email, &user.Avatar, &user.PasswordHash, &user.IsBanned, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.User{}, entity.ErrUserNotFound
@@ -88,6 +88,54 @@ func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, 
 	return user, nil
 }
 
+// List returns a page of users ordered by most recently created first.
+func (r *Repo) List(ctx context.Context, page, limit int) ([]entity.User, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	countSQL, _, err := r.Builder.Select("COUNT(*)").From("users").ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("UserRepo - List - countBuilder: %w", err)
+	}
+	if err := r.Pool.QueryRow(ctx, countSQL).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("UserRepo - List - count query: %w", err)
+	}
+
+	sql, args, err := r.Builder.
+		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, is_banned, created_at, updated_at").
+		From("users").
+		OrderBy("created_at DESC").
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).
+		ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("UserRepo - List - r.Builder: %w", err)
+	}
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("UserRepo - List - r.Pool.Query: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]entity.User, 0, limit)
+	for rows.Next() {
+		var usr entity.User
+		if err := rows.Scan(&usr.ID, &usr.Username, &usr.Email, &usr.Avatar, &usr.PasswordHash, &usr.IsBanned, &usr.CreatedAt, &usr.UpdatedAt); err != nil {
+			return nil, 0, fmt.Errorf("UserRepo - List - rows.Scan: %w", err)
+		}
+		users = append(users, usr)
+	}
+
+	return users, total, nil
+}
+
 // Update persists username, email, and avatar_url changes for the given user.
 func (r *Repo) Update(ctx context.Context, user *entity.User) error {
 	sql, args, err := r.Builder.
@@ -95,6 +143,7 @@ func (r *Repo) Update(ctx context.Context, user *entity.User) error {
 		Set("username", user.Username).
 		Set("email", user.Email).
 		Set("avatar_url", user.Avatar).
+		Set("is_banned", user.IsBanned).
 		Set("updated_at", user.UpdatedAt).
 		Where(sq.Eq{"id": user.ID}).
 		ToSql()

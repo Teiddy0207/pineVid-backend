@@ -104,6 +104,9 @@ func (r *V1) createVideoUpload(ctx *fiber.Ctx) error {
 	uploadDTO, err := r.vd.CreateUpload(ctx.UserContext(), userID, body)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - createVideoUpload")
+		if errors.Is(err, entity.ErrUnsupportedVideoFormat) {
+			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to create video upload")
 	}
 
@@ -307,3 +310,90 @@ func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
 		TotalViews: newViews,
 	})
 }
+
+// @Summary      Update studio video details
+// @Description  Update title, description, category, and visibility of a studio video
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Param        request body request.UpdateVideo true "Video update details"
+// @Success      200 {object} response.VideoResponse
+// @Failure      400 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/videos/{id} [put]
+func (r *V1) updateVideo(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	userID := getUserID(ctx)
+
+	var body request.UpdateVideo
+	if err := ctx.BodyParser(&body); err != nil {
+		r.l.Error(err, "restapi - v1 - updateVideo")
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	resDTO, err := r.vd.UpdateVideo(ctx.UserContext(), userID, id, body)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - updateVideo")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to update video")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
+// @Summary      Update video thumbnail
+// @Description  Update thumbnail URL of a studio video
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Param        request body request.UpdateThumbnail true "Thumbnail update payload"
+// @Success      200 {object} response.VideoResponse
+// @Failure      400 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/videos/{id}/thumbnail [put]
+func (r *V1) updateThumbnail(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	userID := getUserID(ctx)
+
+	var body request.UpdateThumbnail
+	if err := ctx.BodyParser(&body); err != nil {
+		r.l.Error(err, "restapi - v1 - updateThumbnail")
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	resDTO, err := r.vd.UpdateThumbnail(ctx.UserContext(), userID, id, body)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - updateThumbnail")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to update thumbnail")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
+// @Summary      Delete studio video
+// @Description  Delete video by ID from studio
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Success      200 {object} map[string]string
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/videos/{id} [delete]
+func (r *V1) deleteVideo(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	userID := getUserID(ctx)
+
+	if err := r.vd.DeleteVideo(ctx.UserContext(), userID, id); err != nil {
+		r.l.Error(err, "restapi - v1 - deleteVideo")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to delete video")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(fiber.Map{
+		"message": "video deleted successfully",
+	})
+}
+

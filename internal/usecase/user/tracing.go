@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 
+	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/usecase"
 	"go.opentelemetry.io/otel"
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
 
 const _tracerName = "github.com/evrone/go-clean-template/internal/usecase/user"
 
@@ -72,4 +74,14 @@ func (u *tracedUseCase) UpdateUser(ctx context.Context, userID, username, email,
 
 	return result, err
 }
+
+func (u *tracedUseCase) RefreshToken(ctx context.Context, refreshToken string) (response.Token, error) {
+	ctx, span := startSpan(ctx, "UserUseCase.RefreshToken")
+
+	result, err := u.next.RefreshToken(ctx, refreshToken)
+	endSpan(span, err)
+
+	return result, err
+}
+
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
@@ -38,11 +39,15 @@ func (u *UseCase) RecordView(ctx context.Context, videoID, clientIP, deviceID st
 }
 
 func (u *UseCase) CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error) {
-	videoID := uuid.New().String()
-	ext := filepath.Ext(req.FileName)
+	ext := strings.ToLower(filepath.Ext(req.FileName))
 	if ext == "" {
 		ext = ".mp4"
 	}
+	if !entity.AllowedVideoExtensions[ext] {
+		return response.UploadUrlResponse{}, entity.ErrUnsupportedVideoFormat
+	}
+
+	videoID := uuid.New().String()
 	s3Key := fmt.Sprintf("raw-uploads/%s/raw%s", videoID, ext)
 
 	v := mapper.ToVideoEntity(userID, req, videoID, s3Key)
@@ -157,18 +162,7 @@ func (u *UseCase) UpdateVideo(ctx context.Context, userID, videoID string, req r
 		return response.VideoResponse{}, err
 	}
 
-	if req.Title != "" {
-		v.Title = req.Title
-	}
-	if req.Description != "" {
-		v.Description = req.Description
-	}
-	if req.Category != "" {
-		v.Category = req.Category
-	}
-	if req.Visibility != "" {
-		v.Visibility = entity.VideoVisibility(req.Visibility)
-	}
+	mapper.ApplyVideoUpdate(&v, req)
 	v.UpdatedAt = time.Now().UTC()
 
 	if err := u.repo.Update(ctx, &v); err != nil {
@@ -178,9 +172,26 @@ func (u *UseCase) UpdateVideo(ctx context.Context, userID, videoID string, req r
 	return mapper.ToVideoResponse(v), nil
 }
 
+func (u *UseCase) UpdateThumbnail(ctx context.Context, userID, videoID string, req request.UpdateThumbnail) (response.VideoResponse, error) {
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return response.VideoResponse{}, err
+	}
+
+	mapper.ApplyThumbnailUpdate(&v, req)
+	v.UpdatedAt = time.Now().UTC()
+
+	if err := u.repo.Update(ctx, &v); err != nil {
+		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - UpdateThumbnail - Update: %w", err)
+	}
+
+	return mapper.ToVideoResponse(v), nil
+}
+
 func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error {
 	return u.repo.Delete(ctx, videoID)
 }
+
 
 func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error {
 	v, err := u.repo.GetByID(ctx, videoID)

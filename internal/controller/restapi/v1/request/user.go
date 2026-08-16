@@ -19,3 +19,9 @@ type UpdateProfile struct {
 	Email    string `json:"email"    validate:"omitempty,email"         example:"john@example.com"`
 	Avatar   string `json:"avatar"   validate:"omitempty"               example:"https://example.com/avatar.jpg"`
 } // @name v1.UpdateProfile
+
+// RefreshToken -.
+type RefreshToken struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+} // @name v1.RefreshToken
+

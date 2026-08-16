@@ -19,6 +19,8 @@ type V1 struct {
 	cm      usecase.Comment
 	rc      usecase.Recommendation
 	hs      usecase.History
+	fw      usecase.Follow
+	notif   usecase.Notification
 	hub     *events.Hub
 	chatHub *events.ChatHub
 	l       logger.Interface

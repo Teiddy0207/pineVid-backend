@@ -6,8 +6,17 @@ import (
 )
 
 var (
-	ErrVideoNotFound = errors.New("video not found")
+	ErrVideoNotFound          = errors.New("video not found")
+	ErrUnsupportedVideoFormat = errors.New("unsupported video format: only .mp4, .mov, .mkv are allowed")
 )
+
+// AllowedVideoExtensions is the upload allow-list per BUSINESS_REQUIREMENTS.md
+// (".mp4", ".mov", ".mkv").
+var AllowedVideoExtensions = map[string]bool{
+	".mp4": true,
+	".mov": true,
+	".mkv": true,
+}
 
 type VideoStatus string
 

@@ -22,6 +22,7 @@ type (
 	User interface {
 		Register(ctx context.Context, username, email, password string) (entity.User, error)
 		Login(ctx context.Context, email, password string) (string, error)
+		RefreshToken(ctx context.Context, refreshToken string) (response.Token, error)
 		GetUser(ctx context.Context, userID string) (entity.User, error)
 		UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error)
 	}
@@ -45,6 +46,7 @@ type (
 		ListStudioVideos(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		PublishVideo(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error)
+		UpdateThumbnail(ctx context.Context, userID, videoID string, req request.UpdateThumbnail) (response.VideoResponse, error)
 		DeleteVideo(ctx context.Context, userID, videoID string) error
 		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error
 		RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error)
@@ -63,6 +65,14 @@ type (
 		SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error)
 	}
 
+	// Follow -.
+	Follow interface {
+		ToggleFollow(ctx context.Context, followerID, channelID string) (response.FollowToggleResponse, error)
+		CountFollowers(ctx context.Context, channelID string) (int64, error)
+		IsFollowing(ctx context.Context, followerID, channelID string) (bool, error)
+		ListFollowedChannels(ctx context.Context, followerID string, page, limit int) (response.PageResponse[response.ChannelSummary], error)
+	}
+
 	// History -.
 	History interface {
 		RecordWatch(ctx context.Context, userID, videoID string, watchSeconds int) error
@@ -75,6 +85,10 @@ type (
 		GetWorkersStatus(ctx context.Context) ([]response.WorkerStatusResponse, error)
 		BanStream(ctx context.Context, streamID string) error
 		BanVideo(ctx context.Context, videoID string) error
+		ListUsers(ctx context.Context, page, limit int) (response.PageResponse[response.UserResponse], error)
+		BanUser(ctx context.Context, userID string) error
+		UnbanUser(ctx context.Context, userID string) error
+		RecordHeartbeat(ctx context.Context, hb entity.WorkerHeartbeat) error
 	}
 
 	// Like -.
@@ -92,5 +106,13 @@ type (
 	// Recommendation -.
 	Recommendation interface {
 		GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error)
+	}
+
+	// Notification -.
+	Notification interface {
+		ListNotifications(ctx context.Context, userID string, page, limit int) (response.NotificationListResponse, error)
+		MarkAsRead(ctx context.Context, id, userID string) error
+		SubscribeNotifications(userID string) (<-chan response.NotificationResponse, func(), error)
+		NotifyFollowers(ctx context.Context, senderID, senderName, senderAvatar string, notifType entity.NotificationType, title, message, targetURL string) error
 	}
 )

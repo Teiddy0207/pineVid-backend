@@ -87,12 +87,56 @@ func (r *V1) login(ctx *fiber.Ctx) error {
 		if errors.Is(err, entity.ErrInvalidCredentials) {
 			return errorResponse(ctx, http.StatusUnauthorized, "invalid credentials")
 		}
+		if errors.Is(err, entity.ErrUserBanned) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
 
 		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
 	}
 
 	return ctx.Status(http.StatusOK).JSON(response.Token{Token: token})
 }
+
+// @Summary     Refresh access token
+// @Description Obtain a new JWT access token using a valid refresh token
+// @ID          refreshToken
+// @Tags        Auth
+// @Accept      json
+// @Produce     json
+// @Param       request body     request.RefreshToken true "Refresh token payload"
+// @Success     200     {object} response.Token
+// @Failure     400     {object} response.Error
+// @Failure     401     {object} response.Error
+// @Failure     500     {object} response.Error
+// @Router      /v1/auth/refresh [post]
+func (r *V1) refreshToken(ctx *fiber.Ctx) error {
+	var body request.RefreshToken
+
+	if err := ctx.BodyParser(&body); err != nil {
+		r.l.Error(err, "restapi - v1 - refreshToken")
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := r.v.Struct(body); err != nil {
+		r.l.Error(err, "restapi - v1 - refreshToken")
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	tokenDTO, err := r.u.RefreshToken(ctx.UserContext(), body.RefreshToken)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - refreshToken")
+		if errors.Is(err, entity.ErrInvalidCredentials) {
+			return errorResponse(ctx, http.StatusUnauthorized, "invalid refresh token")
+		}
+		if errors.Is(err, entity.ErrUserBanned) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(tokenDTO)
+}
+
 
 // @Summary     Get profile
 // @Description Get current user profile
@@ -173,18 +217,7 @@ func (r *V1) getChannelDetails(ctx *fiber.Ctx) error {
 	user, err := r.u.GetUser(ctx.UserContext(), identifier)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - getChannelDetails")
-		// Fallback response for custom seed identifiers
-		return ctx.Status(http.StatusOK).JSON(response.ChannelDetailsResponse{
-			ID:               identifier,
-			Username:         identifier,
-			Email:            identifier + "@pipevid.internal",
-			Avatar:           "",
-			Bio:              "Verified Content Creator on PipeVid platform.",
-			SubscribersCount: 1280,
-			TotalVideos:      0,
-			TotalViews:       0,
-			CreatedAt:        "2026-01-01T00:00:00Z",
-		})
+		return errorResponse(ctx, http.StatusNotFound, "channel not found")
 	}
 
 	vids, err := r.vd.ListPublicVideos(ctx.UserContext(), user.ID, "", "", 1, 100)
@@ -197,13 +230,15 @@ func (r *V1) getChannelDetails(ctx *fiber.Ctx) error {
 		}
 	}
 
-	var subCount int64 = 1250
-	if len(user.ID) > 0 {
-		var sum int64 = 0
-		for _, ch := range user.ID {
-			sum += int64(ch)
-		}
-		subCount = 800 + (sum % 4200)
+	subCount, err := r.fw.CountFollowers(ctx.UserContext(), user.ID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - getChannelDetails - CountFollowers")
+	}
+
+	viewerID, _ := ctx.Locals("userID").(string)
+	isFollowing, err := r.fw.IsFollowing(ctx.UserContext(), viewerID, user.ID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - getChannelDetails - IsFollowing")
 	}
 
 	return ctx.Status(http.StatusOK).JSON(response.ChannelDetailsResponse{
@@ -213,8 +248,71 @@ func (r *V1) getChannelDetails(ctx *fiber.Ctx) error {
 		Avatar:           user.Avatar,
 		Bio:              "Verified Content Creator on PipeVid Platform.",
 		SubscribersCount: subCount,
+		IsFollowing:      isFollowing,
 		TotalVideos:      total,
 		TotalViews:       totalViews,
 		CreatedAt:        user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
+}
+
+// @Summary      Follow/unfollow a channel
+// @Description  Toggle following the given channel (user) for the current authenticated viewer
+// @Tags         Channels
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Channel (user) ID"
+// @Success      200 {object} response.FollowToggleResponse
+// @Failure      400 {object} response.Error
+// @Failure      401 {object} response.Error
+// @Router       /v1/channels/{id}/follow [post]
+func (r *V1) toggleFollowChannel(ctx *fiber.Ctx) error {
+	channelID := ctx.Params("id")
+	followerID, ok := ctx.Locals("userID").(string)
+	if !ok || followerID == "" {
+		return errorResponse(ctx, http.StatusUnauthorized, "unauthorized")
+	}
+
+	resDTO, err := r.fw.ToggleFollow(ctx.UserContext(), followerID, channelID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - toggleFollowChannel")
+		if errors.Is(err, entity.ErrCannotFollowSelf) {
+			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to toggle follow")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
+// @Summary      List followed channels
+// @Description  Paginated list of channels the current user follows
+// @Tags         Channels
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page query int false "Page number" default(1)
+// @Param        limit query int false "Page limit" default(10)
+// @Success      200 {object} response.PageResponse[response.ChannelSummary]
+// @Failure      401 {object} response.Error
+// @Router       /v1/user/following [get]
+func (r *V1) listFollowedChannels(ctx *fiber.Ctx) error {
+	followerID, ok := ctx.Locals("userID").(string)
+	if !ok || followerID == "" {
+		return errorResponse(ctx, http.StatusUnauthorized, "unauthorized")
+	}
+
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 10)
+	if limit > 50 {
+		limit = 50
+	}
+
+	resDTO, err := r.fw.ListFollowedChannels(ctx.UserContext(), followerID, page, limit)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - listFollowedChannels")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to list followed channels")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
 }

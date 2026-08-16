@@ -192,3 +192,37 @@ func (r *Repo) Update(ctx context.Context, ls *entity.Livestream) error {
 
 	return nil
 }
+
+func (r *Repo) CountActive(ctx context.Context) (int64, error) {
+	sql, args, err := r.Builder.
+		Select("COUNT(*)").
+		From("livestreams").
+		Where(sq.Eq{"is_live": true}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("LivestreamRepo - CountActive - r.Builder: %w", err)
+	}
+
+	var count int64
+	if err := r.Pool.QueryRow(ctx, sql, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("LivestreamRepo - CountActive - QueryRow: %w", err)
+	}
+	return count, nil
+}
+
+func (r *Repo) SumActiveViewers(ctx context.Context) (int64, error) {
+	sql, args, err := r.Builder.
+		Select("COALESCE(SUM(viewers_count), 0)").
+		From("livestreams").
+		Where(sq.Eq{"is_live": true}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("LivestreamRepo - SumActiveViewers - r.Builder: %w", err)
+	}
+
+	var sum int64
+	if err := r.Pool.QueryRow(ctx, sql, args...).Scan(&sum); err != nil {
+		return 0, fmt.Errorf("LivestreamRepo - SumActiveViewers - QueryRow: %w", err)
+	}
+	return sum, nil
+}

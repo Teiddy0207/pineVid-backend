@@ -17,6 +17,10 @@ type UpdateVideo struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 }
 
+type UpdateThumbnail struct {
+	ThumbnailURL string `json:"thumbnail_url" validate:"required"`
+}
+
 type ConfirmUpload struct {
 	VideoID string `json:"video_id" validate:"required"`
 }
@@ -27,4 +31,5 @@ type TranscodeCallback struct {
 	HLSMasterURL string `json:"hls_master_url"`
 	ErrorMessage string `json:"error_message,omitempty"`
 }
+
 

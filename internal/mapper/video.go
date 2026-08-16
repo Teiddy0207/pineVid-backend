@@ -22,6 +22,33 @@ func ToVideoEntity(userID string, req request.CreateVideoUpload, id, s3Key strin
 	}
 }
 
+// ApplyVideoUpdate applies UpdateVideo DTO fields onto an existing Video Entity
+func ApplyVideoUpdate(v *entity.Video, req request.UpdateVideo) {
+	if req.Title != "" {
+		v.Title = req.Title
+	}
+	if req.Description != "" {
+		v.Description = req.Description
+	}
+	if req.Category != "" {
+		v.Category = req.Category
+	}
+	if req.Visibility != "" {
+		v.Visibility = entity.VideoVisibility(req.Visibility)
+	}
+	if req.ThumbnailURL != "" {
+		v.ThumbnailUrl = req.ThumbnailURL
+	}
+}
+
+// ApplyThumbnailUpdate applies UpdateThumbnail DTO field onto Video Entity
+func ApplyThumbnailUpdate(v *entity.Video, req request.UpdateThumbnail) {
+	if req.ThumbnailURL != "" {
+		v.ThumbnailUrl = req.ThumbnailURL
+	}
+}
+
+
 // ToVideoResponse converts Video Entity to VideoResponse DTO
 func ToVideoResponse(v entity.Video) response.VideoResponse {
 	return response.VideoResponse{

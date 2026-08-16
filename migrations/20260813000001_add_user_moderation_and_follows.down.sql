@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS follows;
+ALTER TABLE users DROP COLUMN IF EXISTS is_banned;
