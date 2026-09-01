@@ -137,3 +137,37 @@ func (r *Repo) ListFollowedChannels(ctx context.Context, followerID string, page
 
 	return channels, total, nil
 }
+
+// ListFollowers returns the users who follow channelID (i.e. the reverse of
+// ListFollowedChannels) — used to fan out notifications to a streamer's/
+// uploader's followers.
+func (r *Repo) ListFollowers(ctx context.Context, channelID string, limit int) ([]entity.User, error) {
+	sql, args, err := r.Builder.
+		Select("u.id", "u.username", "u.email", "COALESCE(u.avatar_url, '')", "u.password_hash", "u.is_banned", "u.created_at", "u.updated_at").
+		From("follows f").
+		Join("users u ON u.id::text = f.follower_id").
+		Where(sq.Eq{"f.channel_id": channelID}).
+		OrderBy("f.created_at DESC").
+		Limit(uint64(limit)).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("FollowRepo - ListFollowers - r.Builder: %w", err)
+	}
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("FollowRepo - ListFollowers - Query: %w", err)
+	}
+	defer rows.Close()
+
+	followers := make([]entity.User, 0, limit)
+	for rows.Next() {
+		var u entity.User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Avatar, &u.PasswordHash, &u.IsBanned, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("FollowRepo - ListFollowers - rows.Scan: %w", err)
+		}
+		followers = append(followers, u)
+	}
+
+	return followers, nil
+}

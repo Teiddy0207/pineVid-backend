@@ -11,8 +11,8 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hs: hs, fw: fw, notif: nt, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hs: hs, fw: fw, notif: nt, vocab: vb, sub: sub, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
@@ -22,15 +22,31 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		authGroup.Post("/refresh", r.refreshToken)
 	}
 
+	apiV1Group.Get("/dictionary/lookup", r.lookupDictionary)
+
 	videosPublicGroup := apiV1Group.Group("/videos", middleware.OptionalAuth(jwtManager))
 	{
 		videosPublicGroup.Get("/", r.listPublicVideos)
 		videosPublicGroup.Get("/feed/personalized", r.getPersonalizedFeed)
 		videosPublicGroup.Get("/:id", r.getVideo)
+		videosPublicGroup.Get("/:id/subtitles", r.getVideoSubtitles)
 		videosPublicGroup.Post("/:id/views", r.recordVideoView)
-		videosPublicGroup.Post("/:id/like", r.toggleLikeVideo)
-		videosPublicGroup.Post("/:id/comments", r.createComment)
 		videosPublicGroup.Get("/:id/comments", r.listVideoComments)
+	}
+
+	commentsPublicGroup := apiV1Group.Group("/comments", middleware.OptionalAuth(jwtManager))
+	{
+		commentsPublicGroup.Get("/:id/replies", r.listCommentReplies)
+	}
+
+	// Liking and commenting require a real logged-in identity — an
+	// OptionalAuth caller with no token would otherwise be indistinguishable
+	// from every other anonymous visitor, corrupting per-user like/comment
+	// state (see BUSINESS_REQUIREMENTS.md).
+	videosProtectedGroup := apiV1Group.Group("/videos", middleware.Auth(jwtManager))
+	{
+		videosProtectedGroup.Post("/:id/like", r.toggleLikeVideo)
+		videosProtectedGroup.Post("/:id/comments", r.createComment)
 	}
 
 	channelsPublicGroup := apiV1Group.Group("/channels", middleware.OptionalAuth(jwtManager))
@@ -52,10 +68,18 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		livePublicGroup.Post("/streams/:id/heart", r.heartStream)
 		livePublicGroup.Post("/auth", r.authenticateRTMPStreamKey)      // Internal Webhook for SRS on_publish
 		livePublicGroup.Post("/unpublish", r.unpublishRTMPStream)       // Internal Webhook for SRS on_unpublish
+		livePublicGroup.Post("/dvr", r.handleDVRComplete)               // Internal Webhook for SRS on_dvr
 	}
 
 	// Protected routes
 	protected := apiV1Group.Group("", middleware.Auth(jwtManager))
+
+	vocabGroup := protected.Group("/vocabulary")
+	{
+		vocabGroup.Post("/", r.saveWord)
+		vocabGroup.Get("/", r.listWords)
+		vocabGroup.Delete("/:id", r.deleteWord)
+	}
 
 	notifGroup := protected.Group("/notifications")
 	{
@@ -79,6 +103,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		studioGroup.Post("/upload-url", r.createVideoUpload)
 		studioGroup.Post("/confirm-upload", r.confirmVideoUpload)
 		studioGroup.Post("/videos/:id/publish", r.publishVideo)
+		studioGroup.Post("/videos/:id/subtitles", r.uploadVideoSubtitles)
 		studioGroup.Put("/videos/:id", r.updateVideo)
 		studioGroup.Put("/videos/:id/thumbnail", r.updateThumbnail)
 		studioGroup.Delete("/videos/:id", r.deleteVideo)
@@ -87,7 +112,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	}
 
 
-	adminGroup := protected.Group("/admin")
+	adminGroup := protected.Group("/admin", middleware.RequireAdmin(r.u))
 	{
 		adminGroup.Get("/dashboard", r.getAdminDashboard)
 		adminGroup.Get("/workers", r.getAdminWorkers)

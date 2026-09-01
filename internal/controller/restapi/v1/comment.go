@@ -1,10 +1,12 @@
 package v1
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
+	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -48,6 +50,9 @@ func (r *V1) createComment(ctx *fiber.Ctx) error {
 
 	resDTO, err := r.cm.CreateComment(ctx.UserContext(), videoID, userID, userName, userAvatar, body)
 	if err != nil {
+		if errors.Is(err, entity.ErrInvalidParentID) {
+			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
 		r.l.Error(err, "restapi - v1 - createComment")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to post comment")
 	}
@@ -86,6 +91,42 @@ func (r *V1) listVideoComments(ctx *fiber.Ctx) error {
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - listVideoComments")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to fetch comments")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(pageResDTO)
+}
+
+// @Summary      List replies to a comment
+// @Description  Get paginated replies to a top-level comment
+// @Tags         Comment
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "Parent Comment ID"
+// @Param        page query int false "Page number" default(1)
+// @Param        limit query int false "Page limit" default(10)
+// @Success      200 {object} response.PageResponse[response.CommentResponse]
+// @Failure      500 {object} response.Error
+// @Router       /v1/comments/{id}/replies [get]
+func (r *V1) listCommentReplies(ctx *fiber.Ctx) error {
+	parentID := ctx.Params("id")
+	if parentID == "" {
+		return errorResponse(ctx, http.StatusBadRequest, "comment id required")
+	}
+
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ := strconv.Atoi(ctx.Query("limit", "10"))
+	if limit < 1 || limit > 50 {
+		limit = 10
+	}
+
+	pageResDTO, err := r.cm.ListReplies(ctx.UserContext(), parentID, page, limit)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - listCommentReplies")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to fetch replies")
 	}
 
 	return ctx.Status(http.StatusOK).JSON(pageResDTO)

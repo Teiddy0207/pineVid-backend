@@ -44,6 +44,16 @@ x-backend-app-environment: &x-backend-app-environment
   # JWT
   JWT_SECRET: "your-secret-key-change-in-production"
   JWT_TOKEN_EXPIRY: "24h"
+  # Redis (view counter dedup + like cache)
+  REDIS_URL: "redis:6379"
+  # MinIO (raw video / DVR storage)
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_ACCESS_KEY: "minioadmin"
+  MINIO_SECRET_KEY: "minioadmin123"
+  MINIO_USE_SSL: "false"
+  # DVR — must be the same host path SRS writes recordings to (see the srs
+  # service's ./dvr-data mount) so HandleDVRComplete can read the file back.
+  DVR_LOCAL_DIR: "/dvr-data"
 
 
 services:
@@ -79,16 +89,34 @@ services:
   nats:
     container_name: nats
     image: nats:2.14-alpine
-    command: [ "-m", "8222", "-sd", "/nats-data", "-user", "guest", "-pass", "guest" ]
+    # -js enables JetStream — required by pkg/nats/publisher.go (video.transcode
+    # stream) and the transcode/worker service's durable consumer; without it
+    # both fail with "nats: jetstream not enabled".
+    command: [ "-js", "-m", "8222", "-sd", "/nats-data", "-user", "guest", "-pass", "guest" ]
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      # Host ports shifted off the NATS defaults (4222/8222) — another
+      # unrelated project's container already occupies those on this host.
+      # In-cluster traffic still uses nats:4222 regardless of this mapping.
+      - "4223:4222"
+      - "8223:8222"
     volumes:
       - nats_data:/nats-data
     networks:
       app_network:
         aliases:
           - nats.lvh.me
+
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      app_network:
+        aliases:
+          - redis.lvh.me
 
   jaeger:
     container_name: jaeger
@@ -119,6 +147,10 @@ services:
       - db
       - rabbitmq
       - jaeger
+      - redis
+      - minio
+    volumes:
+      - ./dvr-data:/dvr-data
     deploy:
       resources:
         limits:
@@ -169,9 +201,14 @@ services:
   srs:
     container_name: srs
     image: ossrs/srs:5
-    command: ./objs/srs -c conf/live.conf
+    # mkdir+chmod first: SRS (root) would otherwise create objs/dvr/live with
+    # 755, which the backend process (running as an unprivileged host user)
+    # can't delete recordings from after uploading them to S3.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p objs/dvr/live && chmod -R 777 objs/dvr && exec ./objs/srs -c conf/live.conf"]
     volumes:
       - ./srs/live.conf:/usr/local/srs/conf/live.conf:ro
+      - ./dvr-data:/usr/local/srs/objs/dvr
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -192,4 +229,5 @@ volumes:
   rabbitmq_data:
   nats_data:
   minio_data:
+  redis_data:
 

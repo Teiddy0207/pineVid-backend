@@ -15,5 +15,6 @@ type CommentResponse struct {
 	VideoID   string      `json:"video_id"`
 	User      CommentUser `json:"user"`
 	Content   string      `json:"content"`
+	ParentID  *string     `json:"parent_id,omitempty"`
 	CreatedAt time.Time   `json:"created_at"`
 }

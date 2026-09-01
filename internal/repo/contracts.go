@@ -81,6 +81,7 @@ type (
 		IsFollowing(ctx context.Context, followerID, channelID string) (bool, error)
 		CountFollowers(ctx context.Context, channelID string) (int64, error)
 		ListFollowedChannels(ctx context.Context, followerID string, page, limit int) ([]entity.User, int, error)
+		ListFollowers(ctx context.Context, channelID string, limit int) ([]entity.User, error)
 	}
 
 	// LivestreamRepo -.
@@ -95,6 +96,12 @@ type (
 		SumActiveViewers(ctx context.Context) (int64, error)
 	}
 
+	// SubtitleRepo -.
+	SubtitleRepo interface {
+		ReplaceCues(ctx context.Context, videoID string, cues []entity.SubtitleCue) error
+		GetByVideoID(ctx context.Context, videoID string) ([]entity.SubtitleCue, error)
+	}
+
 	// WorkerRepo -.
 	WorkerRepo interface {
 		UpsertHeartbeat(ctx context.Context, hb entity.WorkerHeartbeat) error
@@ -107,5 +114,20 @@ type (
 		ListByUserID(ctx context.Context, userID string, limit, offset int) ([]entity.Notification, int, error)
 		MarkAsRead(ctx context.Context, id, userID string) error
 		CountUnread(ctx context.Context, userID string) (int, error)
+	}
+
+	// VocabularyRepo -.
+	VocabularyRepo interface {
+		SaveWord(ctx context.Context, item *entity.Vocabulary) error
+		ListByUserID(ctx context.Context, userID string) ([]entity.Vocabulary, error)
+		DeleteWord(ctx context.Context, id, userID string) error
+	}
+
+	// CommentRepo -.
+	CommentRepo interface {
+		Store(ctx context.Context, c *entity.Comment) error
+		GetByID(ctx context.Context, id string) (entity.Comment, error)
+		ListByVideoID(ctx context.Context, videoID string, limit, offset uint64) ([]entity.Comment, int, error)
+		ListRepliesByParentID(ctx context.Context, parentID string, limit, offset uint64) ([]entity.Comment, int, error)
 	}
 )

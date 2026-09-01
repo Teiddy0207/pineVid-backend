@@ -30,6 +30,20 @@
 
 BEGIN;
 
+-- 0) Demo admin account (fixed credentials, idempotent) so the Admin
+--    Dashboard (/v1/admin/*, gated by RequireAdmin) can be exercised without
+--    hand-editing the database. Password: Admin@123456
+INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at)
+VALUES (
+  gen_random_uuid(),
+  'admin_demo',
+  'admin@pipevid.dev',
+  '$2a$10$YXjwOxii7dbRGJHe7yHv6uipXK1lQRONQxGIGRwr5HRvJTYNeEA7q',
+  'admin',
+  now(), now()
+)
+ON CONFLICT (email) DO UPDATE SET role = 'admin';
+
 -- Unique-per-run suffix so this script can be safely re-executed against the
 -- same database without hitting the users.username/email unique constraints.
 CREATE TEMP TABLE seed_run AS SELECT substr(md5(random()::text), 1, 6) AS suffix;

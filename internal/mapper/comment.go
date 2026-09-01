@@ -14,6 +14,7 @@ func ToCommentEntity(videoID, userID, userName, userAvatar string, req request.C
 		UserName:   userName,
 		UserAvatar: userAvatar,
 		Content:    req.Content,
+		ParentID:   req.ParentID,
 	}
 }
 
@@ -27,6 +28,7 @@ func ToCommentResponse(c entity.Comment) response.CommentResponse {
 			Avatar: c.UserAvatar,
 		},
 		Content:   c.Content,
+		ParentID:  c.ParentID,
 		CreatedAt: c.CreatedAt,
 	}
 }

@@ -1,6 +1,14 @@
 package entity
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrCommentNotFound  = errors.New("comment not found")
+	ErrInvalidParentID  = errors.New("parent comment does not exist or belongs to a different video")
+)
 
 type Comment struct {
 	ID         string    `json:"id"`
@@ -9,5 +17,6 @@ type Comment struct {
 	UserName   string    `json:"user_name"`
 	UserAvatar string    `json:"user_avatar"`
 	Content    string    `json:"content"`
+	ParentID   *string   `json:"parent_id,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 }

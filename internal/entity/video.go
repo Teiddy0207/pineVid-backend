@@ -8,6 +8,7 @@ import (
 var (
 	ErrVideoNotFound          = errors.New("video not found")
 	ErrUnsupportedVideoFormat = errors.New("unsupported video format: only .mp4, .mov, .mkv are allowed")
+	ErrVideoForbidden         = errors.New("you do not have permission to modify this video")
 )
 
 // AllowedVideoExtensions is the upload allow-list per BUSINESS_REQUIREMENTS.md

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
@@ -12,17 +15,49 @@ import (
 	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/evrone/go-clean-template/internal/repo"
+	"github.com/evrone/go-clean-template/internal/usecase"
+	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
+	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/google/uuid"
 )
 
-type UseCase struct {
-	repo       repo.LivestreamRepo
-	videoRepo  repo.VideoRepo
-	chatHub    *events.ChatHub
+// pendingEnd tracks a stream that unpublished but hasn't been finalized yet —
+// it may still reconnect within the reconnection grace window. dvrPath is
+// filled in if SRS's on_dvr webhook arrives while we're still waiting (which
+// it normally does, since SRS closes the DVR session right after unpublish,
+// well before our grace period elapses).
+type pendingEnd struct {
+	timer   *time.Timer
+	dvrPath string
 }
 
-func New(r repo.LivestreamRepo, vr repo.VideoRepo, chatHub *events.ChatHub) *UseCase {
-	return &UseCase{repo: r, videoRepo: vr, chatHub: chatHub}
+type UseCase struct {
+	repo          repo.LivestreamRepo
+	videoRepo     repo.VideoRepo
+	chatHub       *events.ChatHub
+	notifUc       usecase.Notification
+	minioClient   *pkgminio.Client
+	natsPublisher *nats.Publisher
+	rawBucket     string
+	dvrLocalDir   string
+	graceDuration time.Duration
+
+	mu      sync.Mutex
+	pending map[string]*pendingEnd
+}
+
+func New(
+	r repo.LivestreamRepo, vr repo.VideoRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
+	minioClient *pkgminio.Client, natsPublisher *nats.Publisher, rawBucket, dvrLocalDir string,
+	graceDuration time.Duration,
+) *UseCase {
+	return &UseCase{
+		repo: r, videoRepo: vr, chatHub: chatHub, notifUc: notifUc,
+		minioClient: minioClient, natsPublisher: natsPublisher,
+		rawBucket: rawBucket, dvrLocalDir: dvrLocalDir,
+		graceDuration: graceDuration,
+		pending:       make(map[string]*pendingEnd),
+	}
 }
 
 func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error) {
@@ -76,6 +111,18 @@ func (u *UseCase) ResetStreamKey(ctx context.Context, userID string) (response.S
 }
 
 func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error) {
+	// A reconnect within the grace window: the stream was never actually
+	// marked offline (see UnpublishStream), so there's nothing to restore —
+	// just cancel the pending finalize and let the publish through.
+	u.mu.Lock()
+	if p, ok := u.pending[req.StreamKey]; ok {
+		p.timer.Stop()
+		delete(u.pending, req.StreamKey)
+		u.mu.Unlock()
+		return true, nil
+	}
+	u.mu.Unlock()
+
 	ls, err := u.repo.GetByStreamKey(ctx, req.StreamKey)
 	if err != nil {
 		return false, entity.ErrInvalidStreamKey
@@ -94,62 +141,173 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 
 	_ = u.repo.Update(ctx, &ls)
 
+	// Notify followers that this streamer just went live. Best-effort and
+	// async: SRS is waiting on this HTTP response to admit the RTMP publish,
+	// so this must never slow down or fail the auth decision.
+	if u.notifUc != nil {
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = u.notifUc.NotifyFollowers(
+				notifyCtx,
+				ls.UserID, ls.UserName, ls.UserAvatar,
+				entity.NotificationTypeLiveStart,
+				fmt.Sprintf("%s is live now", ls.UserName),
+				ls.Title,
+				fmt.Sprintf("/live/%s", ls.ID),
+			)
+		}()
+	}
+
 	return true, nil
 }
 
 // UnpublishStream is called via SRS's on_unpublish webhook when a streamer
-// disconnects (OBS closed, network drop, etc). Marks the stream offline.
+// disconnects (OBS closed, network drop, etc). Rather than ending the stream
+// immediately, it starts a reconnection grace period: the stream is only
+// finalized (marked offline, DVR processed) if no matching on_publish arrives
+// within graceDuration. This absorbs brief network blips without cutting
+// viewers off or generating a throwaway replay video for the interrupted
+// segment.
 func (u *UseCase) UnpublishStream(ctx context.Context, streamKey string) error {
+	if _, err := u.repo.GetByStreamKey(ctx, streamKey); err != nil {
+		return err
+	}
+
+	timer := time.AfterFunc(u.graceDuration, func() {
+		u.finalizeStreamEnd(streamKey)
+	})
+
+	u.mu.Lock()
+	if existing, ok := u.pending[streamKey]; ok {
+		existing.timer.Stop()
+	}
+	u.pending[streamKey] = &pendingEnd{timer: timer}
+	u.mu.Unlock()
+
+	return nil
+}
+
+// finalizeStreamEnd runs after the reconnection grace period elapses with no
+// reconnect. It marks the stream offline and, if SRS's on_dvr webhook handed
+// us a recording path while we were waiting, processes it into a replay
+// video now.
+func (u *UseCase) finalizeStreamEnd(streamKey string) {
+	u.mu.Lock()
+	p, ok := u.pending[streamKey]
+	delete(u.pending, streamKey)
+	u.mu.Unlock()
+	if !ok {
+		return // already cancelled by a reconnect
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	ls, err := u.repo.GetByStreamKey(ctx, streamKey)
 	if err != nil {
-		return err
+		return
 	}
 
 	now := time.Now().UTC()
 	ls.IsLive = false
 	ls.EndedAt = &now
 	ls.UpdatedAt = now
+	_ = u.repo.Update(ctx, &ls)
 
-	if err := u.repo.Update(ctx, &ls); err != nil {
-		return fmt.Errorf("LivestreamUseCase - UnpublishStream - Update: %w", err)
+	if p.dvrPath != "" {
+		_ = u.processDVR(ctx, ls, p.dvrPath)
+	}
+}
+
+// dvrObjectKeyDuration computes a human-readable "HH:MM:SS"/"MM:SS" duration
+// string from a livestream's started_at to now.
+func dvrDuration(startedAt *time.Time, now time.Time) string {
+	if startedAt == nil {
+		return "00:00"
+	}
+	dur := now.Sub(*startedAt)
+	h := int(dur.Hours())
+	m := int(dur.Minutes()) % 60
+	s := int(dur.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+// HandleDVRComplete is called via SRS's on_dvr webhook once a livestream
+// recording has been fully written to disk. SRS treats every reconnect as a
+// brand new RTMP session, so on_dvr fires for the interrupted segment almost
+// immediately after on_unpublish — well before our reconnection grace period
+// (see UnpublishStream) has had a chance to expire. If we're still within
+// that grace window, stash the recording path instead of processing it now:
+// if the streamer reconnects, this segment is discarded (the stream is
+// treated as continuous); only if the grace period actually expires does
+// finalizeStreamEnd process it as the real end-of-stream recording.
+func (u *UseCase) HandleDVRComplete(ctx context.Context, streamKey string) error {
+	localPath := filepath.Join(u.dvrLocalDir, "live", streamKey+".flv")
+
+	u.mu.Lock()
+	if p, ok := u.pending[streamKey]; ok {
+		p.dvrPath = localPath
+		u.mu.Unlock()
+		return nil
+	}
+	u.mu.Unlock()
+
+	ls, err := u.repo.GetByStreamKey(ctx, streamKey)
+	if err != nil {
+		return fmt.Errorf("LivestreamUseCase - HandleDVRComplete - GetByStreamKey: %w", err)
 	}
 
-	// Module 3 SRS Replay Saver Integration:
-	// Automatically save the recording of the finished livestream as a VOD draft video in VideoRepo
-	if u.videoRepo != nil {
-		var durationStr string
-		if ls.StartedAt != nil {
-			dur := now.Sub(*ls.StartedAt)
-			h := int(dur.Hours())
-			m := int(dur.Minutes()) % 60
-			s := int(dur.Seconds()) % 60
-			if h > 0 {
-				durationStr = fmt.Sprintf("%02d:%02d:%02d", h, m, s)
-			} else {
-				durationStr = fmt.Sprintf("%02d:%02d", m, s)
-			}
-		} else {
-			durationStr = "00:00"
-		}
+	return u.processDVR(ctx, ls, localPath)
+}
 
-		replayVideo := entity.Video{
-			ID:           uuid.New().String(),
-			UserID:       ls.UserID,
-			Title:        fmt.Sprintf("[Replay] %s", ls.Title),
-			Description:  fmt.Sprintf("Bản ghi hình phát trực tiếp ngày %s", now.Format("02/01/2006 15:04")),
-			Category:     ls.Category,
-			Status:       entity.VideoStatusComplete,
-			Visibility:   entity.VideoVisibilityPrivate, // Saved as Private draft for streamer to review
-			HLSUrl:       fmt.Sprintf("/vod-replays/%s/index.m3u8", ls.StreamKey),
-			RawS3Key:     fmt.Sprintf("vod-replays/%s/raw.flv", ls.StreamKey),
-			ThumbnailUrl: "",
-			Duration:     durationStr,
-			Views:        0,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		}
-		_ = u.videoRepo.Store(ctx, &replayVideo)
+// processDVR uploads a finished DVR recording to the raw-videos S3 bucket,
+// creates a private draft "replay" video row, and publishes a NATS transcode
+// job — reusing the exact same pipeline (and existing /v1/transcode/callback
+// completion webhook) a manual upload goes through, rather than fabricating a
+// "complete" video that points at a file nobody produced.
+func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPath string) error {
+	if u.minioClient == nil || u.natsPublisher == nil || u.videoRepo == nil || u.dvrLocalDir == "" {
+		return errors.New("processDVR: DVR pipeline not configured")
 	}
+
+	if _, err := os.Stat(localPath); err != nil {
+		return fmt.Errorf("LivestreamUseCase - processDVR - recording file not found at %s: %w", localPath, err)
+	}
+
+	now := time.Now().UTC()
+	videoID := uuid.New().String()
+	rawS3Key := fmt.Sprintf("raw-uploads/%s/raw.flv", videoID)
+
+	if err := u.minioClient.UploadFile(ctx, u.rawBucket, rawS3Key, localPath); err != nil {
+		return fmt.Errorf("LivestreamUseCase - processDVR - UploadFile: %w", err)
+	}
+	_ = os.Remove(localPath) // best-effort local cleanup, the file now lives in S3
+
+	replayVideo := entity.Video{
+		ID:          videoID,
+		UserID:      ls.UserID,
+		UserName:    ls.UserName,
+		UserAvatar:  ls.UserAvatar,
+		Title:       fmt.Sprintf("[Replay] %s", ls.Title),
+		Description: fmt.Sprintf("Bản ghi hình phát trực tiếp ngày %s", now.Format("02/01/2006 15:04")),
+		Category:    ls.Category,
+		Status:      entity.VideoStatusProcessing,
+		Visibility:  entity.VideoVisibilityPrivate, // streamer reviews & publishes from Studio
+		RawS3Key:    rawS3Key,
+		Duration:    dvrDuration(ls.StartedAt, now),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := u.videoRepo.Store(ctx, &replayVideo); err != nil {
+		return fmt.Errorf("LivestreamUseCase - processDVR - Store: %w", err)
+	}
+
+	_ = u.natsPublisher.PublishTranscodeJob(videoID, rawS3Key, ls.UserID)
 
 	return nil
 }

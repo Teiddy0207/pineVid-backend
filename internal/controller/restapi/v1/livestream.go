@@ -232,3 +232,27 @@ func (r *V1) unpublishRTMPStream(ctx *fiber.Ctx) error {
 
 	return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
 }
+
+// @Summary      RTMP DVR-complete webhook
+// @Description  Webhook used by SRS Media Server (on_dvr) once a livestream recording has finished writing to disk
+// @Tags         Livestream
+// @Accept       json
+// @Produce      json
+// @Success      200 {object} map[string]int
+// @Router       /v1/live/dvr [post]
+func (r *V1) handleDVRComplete(ctx *fiber.Ctx) error {
+	var body request.StreamKeyAuth
+	if err := ctx.BodyParser(&body); err != nil {
+		body.StreamKey = ctx.FormValue("name")
+	}
+
+	if body.StreamKey == "" {
+		return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
+	}
+
+	if err := r.ls.HandleDVRComplete(ctx.UserContext(), body.StreamKey); err != nil {
+		r.l.Error(err, "restapi - v1 - handleDVRComplete")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
+}

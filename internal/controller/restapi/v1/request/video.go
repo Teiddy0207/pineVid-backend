@@ -5,6 +5,7 @@ type CreateVideoUpload struct {
 	Description  string `json:"description" validate:"max=1000"`
 	Category     string `json:"category"`
 	FileName     string `json:"file_name" validate:"required"`
+	Visibility   string `json:"visibility" validate:"omitempty,oneof=public private unlisted"`
 	ThumbnailURL string `json:"thumbnail_url"`
 	Duration     string `json:"duration"`
 }

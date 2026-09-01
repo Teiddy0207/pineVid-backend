@@ -37,3 +37,23 @@ type RecordViewResponse struct {
 	Recorded   bool   `json:"recorded"`
 	TotalViews int64  `json:"total_views"`
 }
+
+type SubtitleCueResponse struct {
+	ID       string  `json:"id"`
+	StartSec float64 `json:"start_sec"`
+	EndSec   float64 `json:"end_sec"`
+	TextEN   string  `json:"text_en"`
+	TextVI   string  `json:"text_vi"`
+	TextJA   string  `json:"text_ja"`
+	TextFR   string  `json:"text_fr"`
+	TextES   string  `json:"text_es"`
+	TextDE   string  `json:"text_de"`
+	TextZH   string  `json:"text_zh"`
+	TextKO   string  `json:"text_ko"`
+}
+
+type VideoSubtitlesResponse struct {
+	VideoID string                `json:"video_id"`
+	Cues    []SubtitleCueResponse `json:"cues"`
+}
+

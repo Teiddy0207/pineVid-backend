@@ -21,6 +21,8 @@ type V1 struct {
 	hs      usecase.History
 	fw      usecase.Follow
 	notif   usecase.Notification
+	vocab   usecase.Vocabulary
+	sub     usecase.Subtitle
 	hub     *events.Hub
 	chatHub *events.ChatHub
 	l       logger.Interface

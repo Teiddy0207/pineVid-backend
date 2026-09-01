@@ -24,6 +24,8 @@ import (
 	notifusecase "github.com/evrone/go-clean-template/internal/usecase/notification"
 	recusecase "github.com/evrone/go-clean-template/internal/usecase/recommendation"
 	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
+	subtitleusecase "github.com/evrone/go-clean-template/internal/usecase/subtitle"
+	vocabusecase "github.com/evrone/go-clean-template/internal/usecase/vocabulary"
 	persistCommentRepo "github.com/evrone/go-clean-template/internal/repo/persistent/comment"
 	persistFollowRepo "github.com/evrone/go-clean-template/internal/repo/persistent/follow"
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
@@ -31,12 +33,15 @@ import (
 	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
 	persistNotifRepo "github.com/evrone/go-clean-template/internal/repo/persistent/notification"
 	persistRecRepo "github.com/evrone/go-clean-template/internal/repo/persistent/recommendation"
+	persistSubtitleRepo "github.com/evrone/go-clean-template/internal/repo/persistent/subtitle"
+	persistVocabRepo "github.com/evrone/go-clean-template/internal/repo/persistent/vocabulary"
 	persistWorkerRepo "github.com/evrone/go-clean-template/internal/repo/persistent/worker"
 	persistTaskRepo "github.com/evrone/go-clean-template/internal/repo/persistent/task"
 	persistTranslationRepo "github.com/evrone/go-clean-template/internal/repo/persistent/translation"
 	persistUserRepo "github.com/evrone/go-clean-template/internal/repo/persistent/user"
 	persistVideoRepo "github.com/evrone/go-clean-template/internal/repo/persistent/video"
 	persistViewRepo "github.com/evrone/go-clean-template/internal/repo/persistent/view"
+	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
 	redispkg "github.com/evrone/go-clean-template/pkg/redis"
 	"github.com/evrone/go-clean-template/internal/repo/webapi"
 	"github.com/evrone/go-clean-template/internal/usecase"
@@ -68,6 +73,8 @@ type useCases struct {
 	history        usecase.History
 	follow         usecase.Follow
 	notification   usecase.Notification
+	vocabulary     usecase.Vocabulary
+	subtitle       usecase.Subtitle
 }
 
 type servers struct {
@@ -87,6 +94,8 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	historyRepo := persistHistoryRepo.New(pg)
 	followRepo := persistFollowRepo.New(pg)
 	notifRepo := persistNotifRepo.New(pg)
+	vocabRepo := persistVocabRepo.New(pg)
+	subtitleRepo := persistSubtitleRepo.New(pg)
 
 	redisClient, err := redispkg.New(cfg.Redis.URL, "", 0)
 	if err != nil {
@@ -96,8 +105,14 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	likeRepo := persistLikeRepo.New(pg, redisClient)
 
 	natsPub, _ := nats.NewPublisher()
-	videoUc := videousecase.New(videoRepo, viewRepo, natsPub)
-	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, chatHub)
+	notifUc := notifusecase.New(notifRepo, followRepo, notifHub)
+	videoUc := videousecase.New(videoRepo, viewRepo, natsPub, notifUc)
+
+	minioClient, err := pkgminio.New(cfg.Minio.Endpoint, cfg.Minio.AccessKey, cfg.Minio.SecretKey, cfg.Minio.UseSSL)
+	if err != nil {
+		l.Error(fmt.Errorf("app - initUseCases - pkgminio.New: %w", err))
+	}
+	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, chatHub, notifUc, minioClient, natsPub, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
 	workerRepo := persistWorkerRepo.New(pg)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo, userRepo, workerRepo)
 	likeUc := likeusecase.New(likeRepo, natsPub)
@@ -106,7 +121,8 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	recUc.StartBackgroundTraining(context.Background(), 5*time.Minute)
 	historyUc := historyusecase.New(historyRepo)
 	followUc := followusecase.New(followRepo)
-	notifUc := notifusecase.New(notifRepo, followRepo, notifHub)
+	vocabUc := vocabusecase.New(vocabRepo)
+	subtitleUc := subtitleusecase.New(subtitleRepo, videoRepo)
 
 	return useCases{
 		user:           user.New(userRepo, jwtManager),
@@ -121,6 +137,8 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		history:        historyUc,
 		follow:         followUc,
 		notification:   notifUc,
+		vocabulary:     vocabUc,
+		subtitle:       subtitleUc,
 	}
 }
 
@@ -150,7 +168,7 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 	// HTTP Server
 	videoEventHub := events.NewHub()
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
-	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.recommendation, uc.history, uc.follow, uc.notification, videoEventHub, chatHub, jwtManager, l)
+	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.recommendation, uc.history, uc.follow, uc.notification, uc.vocabulary, uc.subtitle, videoEventHub, chatHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,

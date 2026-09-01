@@ -16,11 +16,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// getUserID returns the authenticated caller's userID. All callers of this
+// helper sit behind middleware.Auth, which already rejects the request
+// before the handler runs if no valid token was presented — so a missing
+// value here would indicate a routing bug, not a legitimate anonymous caller.
 func getUserID(ctx *fiber.Ctx) string {
-	if userID, ok := ctx.Locals("userID").(string); ok && userID != "" {
-		return userID
-	}
-	return "mock-user-123"
+	userID, _ := ctx.Locals("userID").(string)
+	return userID
 }
 
 // @Summary      List public videos
@@ -97,6 +99,10 @@ func (r *V1) createVideoUpload(ctx *fiber.Ctx) error {
 	if err := ctx.BodyParser(&body); err != nil {
 		r.l.Error(err, "restapi - v1 - createVideoUpload")
 		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := r.v.Struct(body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
 	}
 
 	userID := getUserID(ctx)
@@ -336,6 +342,12 @@ func (r *V1) updateVideo(ctx *fiber.Ctx) error {
 	resDTO, err := r.vd.UpdateVideo(ctx.UserContext(), userID, id, body)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - updateVideo")
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to update video")
 	}
 
@@ -367,6 +379,12 @@ func (r *V1) updateThumbnail(ctx *fiber.Ctx) error {
 	resDTO, err := r.vd.UpdateThumbnail(ctx.UserContext(), userID, id, body)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - updateThumbnail")
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to update thumbnail")
 	}
 
@@ -389,6 +407,12 @@ func (r *V1) deleteVideo(ctx *fiber.Ctx) error {
 
 	if err := r.vd.DeleteVideo(ctx.UserContext(), userID, id); err != nil {
 		r.l.Error(err, "restapi - v1 - deleteVideo")
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to delete video")
 	}
 
@@ -397,3 +421,62 @@ func (r *V1) deleteVideo(ctx *fiber.Ctx) error {
 	})
 }
 
+// @Summary      Get video subtitles
+// @Description  Bilingual (English/Vietnamese) WebVTT cues for a video, if any were uploaded
+// @Tags         Videos
+// @Produce      json
+// @Param        id path string true "Video ID"
+// @Success      200 {object} response.Response[response.VideoSubtitlesResponse]
+// @Router       /v1/videos/{id}/subtitles [get]
+func (r *V1) getVideoSubtitles(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+
+	resDTO, err := r.sub.GetSubtitles(ctx.UserContext(), id)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - getVideoSubtitles")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to load subtitles")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(response.Response[response.VideoSubtitlesResponse]{
+		Success: true,
+		Data:    resDTO,
+	})
+}
+
+// @Summary      Upload video subtitles
+// @Description  Parse and store a bilingual (English required, Vietnamese optional) WebVTT subtitle track, replacing any previous one
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Param        request body request.UploadSubtitles true "WebVTT content"
+// @Success      200 {object} map[string]interface{}
+// @Failure      400 {object} response.Error
+// @Failure      403 {object} response.Error
+// @Router       /v1/studio/videos/{id}/subtitles [post]
+func (r *V1) uploadVideoSubtitles(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	userID := getUserID(ctx)
+
+	var body request.UploadSubtitles
+	if err := ctx.BodyParser(&body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+	if err := r.v.Struct(body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+
+	if err := r.sub.UploadSubtitles(ctx.UserContext(), userID, id, body.VTTEnglish, body.VTTVietnamese); err != nil {
+		r.l.Error(err, "restapi - v1 - uploadVideoSubtitles")
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+
+	return ctx.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+}

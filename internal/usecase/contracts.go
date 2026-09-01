@@ -58,11 +58,18 @@ type (
 		ResetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)
 		AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error)
 		UnpublishStream(ctx context.Context, streamKey string) error
+		HandleDVRComplete(ctx context.Context, streamKey string) error
 		GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error)
 		ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error)
 		UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error)
 		SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error)
 		SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error)
+	}
+
+	// Subtitle -.
+	Subtitle interface {
+		GetSubtitles(ctx context.Context, videoID string) (response.VideoSubtitlesResponse, error)
+		UploadSubtitles(ctx context.Context, userID, videoID, vttEN, vttVI string) error
 	}
 
 	// Follow -.
@@ -101,6 +108,7 @@ type (
 	Comment interface {
 		CreateComment(ctx context.Context, videoID, userID, userName, userAvatar string, req request.CreateCommentRequest) (response.CommentResponse, error)
 		ListVideoComments(ctx context.Context, videoID string, page, limit int) (response.PageResponse[response.CommentResponse], error)
+		ListReplies(ctx context.Context, parentID string, page, limit int) (response.PageResponse[response.CommentResponse], error)
 	}
 
 	// Recommendation -.
@@ -114,5 +122,13 @@ type (
 		MarkAsRead(ctx context.Context, id, userID string) error
 		SubscribeNotifications(userID string) (<-chan response.NotificationResponse, func(), error)
 		NotifyFollowers(ctx context.Context, senderID, senderName, senderAvatar string, notifType entity.NotificationType, title, message, targetURL string) error
+	}
+
+	// Vocabulary -.
+	Vocabulary interface {
+		SaveWord(ctx context.Context, userID string, req request.SaveWordRequest) (response.VocabularyResponse, error)
+		ListWords(ctx context.Context, userID string) ([]response.VocabularyResponse, error)
+		DeleteWord(ctx context.Context, id, userID string) error
+		LookupWord(ctx context.Context, word string) (response.DictionaryLookupResponse, error)
 	}
 )

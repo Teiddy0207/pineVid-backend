@@ -556,6 +556,21 @@ func (mr *MockFollowRepoMockRecorder) ListFollowedChannels(ctx, followerID, page
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFollowedChannels", reflect.TypeOf((*MockFollowRepo)(nil).ListFollowedChannels), ctx, followerID, page, limit)
 }
 
+// ListFollowers mocks base method.
+func (m *MockFollowRepo) ListFollowers(ctx context.Context, channelID string, limit int) ([]entity.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListFollowers", ctx, channelID, limit)
+	ret0, _ := ret[0].([]entity.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListFollowers indicates an expected call of ListFollowers.
+func (mr *MockFollowRepoMockRecorder) ListFollowers(ctx, channelID, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFollowers", reflect.TypeOf((*MockFollowRepo)(nil).ListFollowers), ctx, channelID, limit)
+}
+
 // Unfollow mocks base method.
 func (m *MockFollowRepo) Unfollow(ctx context.Context, followerID, channelID string) error {
 	m.ctrl.T.Helper()
@@ -713,6 +728,59 @@ func (mr *MockLivestreamRepoMockRecorder) Update(ctx, ls any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockLivestreamRepo)(nil).Update), ctx, ls)
 }
 
+// MockSubtitleRepo is a mock of SubtitleRepo interface.
+type MockSubtitleRepo struct {
+	ctrl     *gomock.Controller
+	recorder *MockSubtitleRepoMockRecorder
+	isgomock struct{}
+}
+
+// MockSubtitleRepoMockRecorder is the mock recorder for MockSubtitleRepo.
+type MockSubtitleRepoMockRecorder struct {
+	mock *MockSubtitleRepo
+}
+
+// NewMockSubtitleRepo creates a new mock instance.
+func NewMockSubtitleRepo(ctrl *gomock.Controller) *MockSubtitleRepo {
+	mock := &MockSubtitleRepo{ctrl: ctrl}
+	mock.recorder = &MockSubtitleRepoMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSubtitleRepo) EXPECT() *MockSubtitleRepoMockRecorder {
+	return m.recorder
+}
+
+// GetByVideoID mocks base method.
+func (m *MockSubtitleRepo) GetByVideoID(ctx context.Context, videoID string) ([]entity.SubtitleCue, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByVideoID", ctx, videoID)
+	ret0, _ := ret[0].([]entity.SubtitleCue)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByVideoID indicates an expected call of GetByVideoID.
+func (mr *MockSubtitleRepoMockRecorder) GetByVideoID(ctx, videoID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByVideoID", reflect.TypeOf((*MockSubtitleRepo)(nil).GetByVideoID), ctx, videoID)
+}
+
+// ReplaceCues mocks base method.
+func (m *MockSubtitleRepo) ReplaceCues(ctx context.Context, videoID string, cues []entity.SubtitleCue) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplaceCues", ctx, videoID, cues)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplaceCues indicates an expected call of ReplaceCues.
+func (mr *MockSubtitleRepoMockRecorder) ReplaceCues(ctx, videoID, cues any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceCues", reflect.TypeOf((*MockSubtitleRepo)(nil).ReplaceCues), ctx, videoID, cues)
+}
+
 // MockWorkerRepo is a mock of WorkerRepo interface.
 type MockWorkerRepo struct {
 	ctrl     *gomock.Controller
@@ -764,4 +832,239 @@ func (m *MockWorkerRepo) UpsertHeartbeat(ctx context.Context, hb entity.WorkerHe
 func (mr *MockWorkerRepoMockRecorder) UpsertHeartbeat(ctx, hb any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertHeartbeat", reflect.TypeOf((*MockWorkerRepo)(nil).UpsertHeartbeat), ctx, hb)
+}
+
+// MockNotificationRepo is a mock of NotificationRepo interface.
+type MockNotificationRepo struct {
+	ctrl     *gomock.Controller
+	recorder *MockNotificationRepoMockRecorder
+	isgomock struct{}
+}
+
+// MockNotificationRepoMockRecorder is the mock recorder for MockNotificationRepo.
+type MockNotificationRepoMockRecorder struct {
+	mock *MockNotificationRepo
+}
+
+// NewMockNotificationRepo creates a new mock instance.
+func NewMockNotificationRepo(ctrl *gomock.Controller) *MockNotificationRepo {
+	mock := &MockNotificationRepo{ctrl: ctrl}
+	mock.recorder = &MockNotificationRepoMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNotificationRepo) EXPECT() *MockNotificationRepoMockRecorder {
+	return m.recorder
+}
+
+// CountUnread mocks base method.
+func (m *MockNotificationRepo) CountUnread(ctx context.Context, userID string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountUnread", ctx, userID)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountUnread indicates an expected call of CountUnread.
+func (mr *MockNotificationRepoMockRecorder) CountUnread(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountUnread", reflect.TypeOf((*MockNotificationRepo)(nil).CountUnread), ctx, userID)
+}
+
+// ListByUserID mocks base method.
+func (m *MockNotificationRepo) ListByUserID(ctx context.Context, userID string, limit, offset int) ([]entity.Notification, int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByUserID", ctx, userID, limit, offset)
+	ret0, _ := ret[0].([]entity.Notification)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListByUserID indicates an expected call of ListByUserID.
+func (mr *MockNotificationRepoMockRecorder) ListByUserID(ctx, userID, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByUserID", reflect.TypeOf((*MockNotificationRepo)(nil).ListByUserID), ctx, userID, limit, offset)
+}
+
+// MarkAsRead mocks base method.
+func (m *MockNotificationRepo) MarkAsRead(ctx context.Context, id, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkAsRead", ctx, id, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkAsRead indicates an expected call of MarkAsRead.
+func (mr *MockNotificationRepoMockRecorder) MarkAsRead(ctx, id, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsRead", reflect.TypeOf((*MockNotificationRepo)(nil).MarkAsRead), ctx, id, userID)
+}
+
+// Store mocks base method.
+func (m *MockNotificationRepo) Store(ctx context.Context, notif *entity.Notification) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Store", ctx, notif)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Store indicates an expected call of Store.
+func (mr *MockNotificationRepoMockRecorder) Store(ctx, notif any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockNotificationRepo)(nil).Store), ctx, notif)
+}
+
+// MockVocabularyRepo is a mock of VocabularyRepo interface.
+type MockVocabularyRepo struct {
+	ctrl     *gomock.Controller
+	recorder *MockVocabularyRepoMockRecorder
+	isgomock struct{}
+}
+
+// MockVocabularyRepoMockRecorder is the mock recorder for MockVocabularyRepo.
+type MockVocabularyRepoMockRecorder struct {
+	mock *MockVocabularyRepo
+}
+
+// NewMockVocabularyRepo creates a new mock instance.
+func NewMockVocabularyRepo(ctrl *gomock.Controller) *MockVocabularyRepo {
+	mock := &MockVocabularyRepo{ctrl: ctrl}
+	mock.recorder = &MockVocabularyRepoMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockVocabularyRepo) EXPECT() *MockVocabularyRepoMockRecorder {
+	return m.recorder
+}
+
+// DeleteWord mocks base method.
+func (m *MockVocabularyRepo) DeleteWord(ctx context.Context, id, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWord", ctx, id, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWord indicates an expected call of DeleteWord.
+func (mr *MockVocabularyRepoMockRecorder) DeleteWord(ctx, id, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWord", reflect.TypeOf((*MockVocabularyRepo)(nil).DeleteWord), ctx, id, userID)
+}
+
+// ListByUserID mocks base method.
+func (m *MockVocabularyRepo) ListByUserID(ctx context.Context, userID string) ([]entity.Vocabulary, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByUserID", ctx, userID)
+	ret0, _ := ret[0].([]entity.Vocabulary)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListByUserID indicates an expected call of ListByUserID.
+func (mr *MockVocabularyRepoMockRecorder) ListByUserID(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByUserID", reflect.TypeOf((*MockVocabularyRepo)(nil).ListByUserID), ctx, userID)
+}
+
+// SaveWord mocks base method.
+func (m *MockVocabularyRepo) SaveWord(ctx context.Context, item *entity.Vocabulary) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveWord", ctx, item)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SaveWord indicates an expected call of SaveWord.
+func (mr *MockVocabularyRepoMockRecorder) SaveWord(ctx, item any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveWord", reflect.TypeOf((*MockVocabularyRepo)(nil).SaveWord), ctx, item)
+}
+
+// MockCommentRepo is a mock of CommentRepo interface.
+type MockCommentRepo struct {
+	ctrl     *gomock.Controller
+	recorder *MockCommentRepoMockRecorder
+	isgomock struct{}
+}
+
+// MockCommentRepoMockRecorder is the mock recorder for MockCommentRepo.
+type MockCommentRepoMockRecorder struct {
+	mock *MockCommentRepo
+}
+
+// NewMockCommentRepo creates a new mock instance.
+func NewMockCommentRepo(ctrl *gomock.Controller) *MockCommentRepo {
+	mock := &MockCommentRepo{ctrl: ctrl}
+	mock.recorder = &MockCommentRepoMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCommentRepo) EXPECT() *MockCommentRepoMockRecorder {
+	return m.recorder
+}
+
+// GetByID mocks base method.
+func (m *MockCommentRepo) GetByID(ctx context.Context, id string) (entity.Comment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByID", ctx, id)
+	ret0, _ := ret[0].(entity.Comment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByID indicates an expected call of GetByID.
+func (mr *MockCommentRepoMockRecorder) GetByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByID", reflect.TypeOf((*MockCommentRepo)(nil).GetByID), ctx, id)
+}
+
+// ListByVideoID mocks base method.
+func (m *MockCommentRepo) ListByVideoID(ctx context.Context, videoID string, limit, offset uint64) ([]entity.Comment, int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByVideoID", ctx, videoID, limit, offset)
+	ret0, _ := ret[0].([]entity.Comment)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListByVideoID indicates an expected call of ListByVideoID.
+func (mr *MockCommentRepoMockRecorder) ListByVideoID(ctx, videoID, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByVideoID", reflect.TypeOf((*MockCommentRepo)(nil).ListByVideoID), ctx, videoID, limit, offset)
+}
+
+// ListRepliesByParentID mocks base method.
+func (m *MockCommentRepo) ListRepliesByParentID(ctx context.Context, parentID string, limit, offset uint64) ([]entity.Comment, int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRepliesByParentID", ctx, parentID, limit, offset)
+	ret0, _ := ret[0].([]entity.Comment)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListRepliesByParentID indicates an expected call of ListRepliesByParentID.
+func (mr *MockCommentRepoMockRecorder) ListRepliesByParentID(ctx, parentID, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRepliesByParentID", reflect.TypeOf((*MockCommentRepo)(nil).ListRepliesByParentID), ctx, parentID, limit, offset)
+}
+
+// Store mocks base method.
+func (m *MockCommentRepo) Store(ctx context.Context, c *entity.Comment) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Store", ctx, c)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Store indicates an expected call of Store.
+func (mr *MockCommentRepoMockRecorder) Store(ctx, c any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCommentRepo)(nil).Store), ctx, c)
 }

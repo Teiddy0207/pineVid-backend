@@ -23,6 +23,8 @@ type (
 		Metrics metrics
 		Swagger swagger
 		Tracing tracing
+		Minio   minio
+		DVR     dvr
 	}
 
 	// App -.
@@ -93,6 +95,21 @@ type (
 		OTLPEndpoint string  `env:"TRACING_OTLP_ENDPOINT" envDefault:"localhost:4317"`
 		OTLPInsecure bool    `env:"TRACING_OTLP_INSECURE" envDefault:"true"`
 		SampleRate   float64 `env:"TRACING_SAMPLE_RATE" envDefault:"0.1"`
+	}
+
+	// Minio -.
+	minio struct {
+		Endpoint  string `env:"MINIO_ENDPOINT" envDefault:"localhost:9000"`
+		AccessKey string `env:"MINIO_ACCESS_KEY" envDefault:"minioadmin"`
+		SecretKey string `env:"MINIO_SECRET_KEY" envDefault:"minioadmin123"`
+		UseSSL    bool   `env:"MINIO_USE_SSL" envDefault:"false"`
+		RawBucket string `env:"MINIO_RAW_BUCKET" envDefault:"raw-videos"`
+	}
+
+	// DVR -. Local filesystem path where SRS writes livestream recordings
+	// (bind-mounted into the SRS container at the same relative dvr_path).
+	dvr struct {
+		LocalDir string `env:"DVR_LOCAL_DIR" envDefault:"./dvr-data"`
 	}
 )
 

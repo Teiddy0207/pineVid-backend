@@ -13,6 +13,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/evrone/go-clean-template/internal/repo/persistent/view"
+	"github.com/evrone/go-clean-template/internal/usecase"
 	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/google/uuid"
 )
@@ -21,13 +22,15 @@ type UseCase struct {
 	repo          repo.VideoRepo
 	viewRepo      *view.Repo
 	natsPublisher *nats.Publisher
+	notifUc       usecase.Notification
 }
 
-func New(r repo.VideoRepo, vRepo *view.Repo, natsPub *nats.Publisher) *UseCase {
+func New(r repo.VideoRepo, vRepo *view.Repo, natsPub *nats.Publisher, notifUc usecase.Notification) *UseCase {
 	return &UseCase{
 		repo:          r,
 		viewRepo:      vRepo,
 		natsPublisher: natsPub,
+		notifUc:       notifUc,
 	}
 }
 
@@ -145,12 +148,34 @@ func (u *UseCase) PublishVideo(ctx context.Context, userID, videoID string) (res
 	if err != nil {
 		return response.VideoResponse{}, err
 	}
+	if v.UserID != userID {
+		return response.VideoResponse{}, entity.ErrVideoForbidden
+	}
+
+	wasAlreadyPublic := v.Visibility == entity.VideoVisibilityPublic
 
 	v.Visibility = entity.VideoVisibilityPublic
 	v.UpdatedAt = time.Now().UTC()
 
 	if err := u.repo.Update(ctx, &v); err != nil {
 		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - PublishVideo - Update: %w", err)
+	}
+
+	// Notify followers of the new video — but only the first time it goes
+	// public, so re-saving an already-public video doesn't spam followers.
+	if u.notifUc != nil && !wasAlreadyPublic {
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = u.notifUc.NotifyFollowers(
+				notifyCtx,
+				v.UserID, v.UserName, v.UserAvatar,
+				entity.NotificationTypeNewVideo,
+				fmt.Sprintf("%s posted a new video", v.UserName),
+				v.Title,
+				fmt.Sprintf("/watch/%s", v.ID),
+			)
+		}()
 	}
 
 	return mapper.ToVideoResponse(v), nil
@@ -160,6 +185,9 @@ func (u *UseCase) UpdateVideo(ctx context.Context, userID, videoID string, req r
 	v, err := u.repo.GetByID(ctx, videoID)
 	if err != nil {
 		return response.VideoResponse{}, err
+	}
+	if v.UserID != userID {
+		return response.VideoResponse{}, entity.ErrVideoForbidden
 	}
 
 	mapper.ApplyVideoUpdate(&v, req)
@@ -177,6 +205,9 @@ func (u *UseCase) UpdateThumbnail(ctx context.Context, userID, videoID string, r
 	if err != nil {
 		return response.VideoResponse{}, err
 	}
+	if v.UserID != userID {
+		return response.VideoResponse{}, entity.ErrVideoForbidden
+	}
 
 	mapper.ApplyThumbnailUpdate(&v, req)
 	v.UpdatedAt = time.Now().UTC()
@@ -189,6 +220,13 @@ func (u *UseCase) UpdateThumbnail(ctx context.Context, userID, videoID string, r
 }
 
 func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error {
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return err
+	}
+	if v.UserID != userID {
+		return entity.ErrVideoForbidden
+	}
 	return u.repo.Delete(ctx, videoID)
 }
 
@@ -198,6 +236,8 @@ func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, 
 	if err != nil {
 		return fmt.Errorf("VideoUseCase - HandleTranscodeCallback - GetByID: %w", err)
 	}
+
+	wasComplete := v.Status == entity.VideoStatusComplete
 
 	if status == "complete" {
 		v.Status = entity.VideoStatusComplete
@@ -209,6 +249,29 @@ func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, 
 	}
 
 	v.UpdatedAt = time.Now().UTC()
-	return u.repo.Update(ctx, &v)
+	if err := u.repo.Update(ctx, &v); err != nil {
+		return err
+	}
+
+	// Notify followers once a public video is actually watchable — not at
+	// upload time (PublishVideo's own notify only fires when a private/
+	// unlisted video is switched to public, which doesn't cover the default
+	// public-on-upload flow this transcode completion always goes through).
+	if u.notifUc != nil && status == "complete" && !wasComplete && v.Visibility == entity.VideoVisibilityPublic {
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = u.notifUc.NotifyFollowers(
+				notifyCtx,
+				v.UserID, v.UserName, v.UserAvatar,
+				entity.NotificationTypeNewVideo,
+				fmt.Sprintf("%s posted a new video", v.UserName),
+				v.Title,
+				fmt.Sprintf("/watch/%s", v.ID),
+			)
+		}()
+	}
+
+	return nil
 }
 

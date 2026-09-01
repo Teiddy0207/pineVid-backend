@@ -8,6 +8,11 @@ import (
 
 // ToVideoEntity converts CreateVideoUpload request DTO to Video Entity
 func ToVideoEntity(userID string, req request.CreateVideoUpload, id, s3Key string) entity.Video {
+	visibility := entity.VideoVisibilityPublic
+	if req.Visibility != "" {
+		visibility = entity.VideoVisibility(req.Visibility)
+	}
+
 	return entity.Video{
 		ID:           id,
 		UserID:       userID,
@@ -15,7 +20,7 @@ func ToVideoEntity(userID string, req request.CreateVideoUpload, id, s3Key strin
 		Description:  req.Description,
 		Category:     req.Category,
 		Status:       entity.VideoStatusPending,
-		Visibility:   entity.VideoVisibilityPublic,
+		Visibility:   visibility,
 		RawS3Key:     s3Key,
 		ThumbnailUrl: req.ThumbnailURL,
 		Duration:     req.Duration,

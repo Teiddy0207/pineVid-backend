@@ -75,13 +75,11 @@ func (u *UseCase) NotifyFollowers(
 		return nil
 	}
 
-	// Fetch up to 1000 followers
-	followers, _, err := u.followRepo.ListFollowedChannels(ctx, senderID, 1, 1000)
-	if err != nil && !errors.Is(err, entity.ErrUserNotFound) {
-		// Try fetching via raw channel followers if needed, or iterate
+	followers, err := u.followRepo.ListFollowers(ctx, senderID, 1000)
+	if err != nil {
+		return fmt.Errorf("NotificationUseCase - NotifyFollowers - ListFollowers: %w", err)
 	}
 
-	// We can also query all followers directly via followRepo if available or list followers
 	// For each follower, save to notification table & push to hub if online
 	now := time.Now().UTC()
 	for _, follower := range followers {

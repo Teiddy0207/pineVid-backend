@@ -28,8 +28,8 @@ func New(pg *postgres.Postgres) repo.UserRepo {
 func (r *Repo) Store(ctx context.Context, user *entity.User) error {
 	sql, args, err := r.Builder.
 		Insert("users").
-		Columns("id, username, email, password_hash, created_at, updated_at").
-		Values(user.ID, user.Username, user.Email, user.PasswordHash, user.CreatedAt, user.UpdatedAt).
+		Columns("id, username, email, password_hash, role, created_at, updated_at").
+		Values(user.ID, user.Username, user.Email, user.PasswordHash, user.Role, user.CreatedAt, user.UpdatedAt).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("UserRepo - Store - r.Builder: %w", err)
@@ -65,7 +65,7 @@ func (r *Repo) GetByUsername(ctx context.Context, username string) (entity.User,
 
 func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, error) {
 	sql, args, err := r.Builder.
-		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, is_banned, created_at, updated_at").
+		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, role, is_banned, created_at, updated_at").
 		From("users").
 		Where(sq.Eq{column: value}).
 		ToSql()
@@ -76,7 +76,7 @@ func (r *Repo) getUser(ctx context.Context, column, value string) (entity.User, 
 	var user entity.User
 
 	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&user.ID, &user.Username, &user.Email, &user.Avatar, &user.PasswordHash, &user.IsBanned, &user.CreatedAt, &user.UpdatedAt)
+		Scan(&user.ID, &user.Username, &user.Email, &user.Avatar, &user.PasswordHash, &user.Role, &user.IsBanned, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.User{}, entity.ErrUserNotFound
@@ -108,7 +108,7 @@ func (r *Repo) List(ctx context.Context, page, limit int) ([]entity.User, int, e
 	}
 
 	sql, args, err := r.Builder.
-		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, is_banned, created_at, updated_at").
+		Select("id, username, email, COALESCE(avatar_url, ''), password_hash, role, is_banned, created_at, updated_at").
 		From("users").
 		OrderBy("created_at DESC").
 		Limit(uint64(limit)).
@@ -127,7 +127,7 @@ func (r *Repo) List(ctx context.Context, page, limit int) ([]entity.User, int, e
 	users := make([]entity.User, 0, limit)
 	for rows.Next() {
 		var usr entity.User
-		if err := rows.Scan(&usr.ID, &usr.Username, &usr.Email, &usr.Avatar, &usr.PasswordHash, &usr.IsBanned, &usr.CreatedAt, &usr.UpdatedAt); err != nil {
+		if err := rows.Scan(&usr.ID, &usr.Username, &usr.Email, &usr.Avatar, &usr.PasswordHash, &usr.Role, &usr.IsBanned, &usr.CreatedAt, &usr.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("UserRepo - List - rows.Scan: %w", err)
 		}
 		users = append(users, usr)

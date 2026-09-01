@@ -9,17 +9,19 @@ import (
 
 func ToNotificationResponse(n entity.Notification) response.NotificationResponse {
 	return response.NotificationResponse{
-		ID:           n.ID,
-		UserID:       n.UserID,
-		SenderID:     n.SenderID,
-		SenderName:   n.SenderName,
-		SenderAvatar: n.SenderAvatar,
-		Type:         string(n.Type),
-		Title:        n.Title,
-		Message:      n.Message,
-		TargetURL:    n.TargetURL,
-		IsRead:       n.IsRead,
-		CreatedAt:    n.CreatedAt.Format(time.RFC3339),
+		ID:     n.ID,
+		UserID: n.UserID,
+		Sender: response.NotificationSender{
+			ID:     n.SenderID,
+			Name:   n.SenderName,
+			Avatar: n.SenderAvatar,
+		},
+		Type:      string(n.Type),
+		Title:     n.Title,
+		Message:   n.Message,
+		TargetURL: n.TargetURL,
+		IsRead:    n.IsRead,
+		CreatedAt: n.CreatedAt.Format(time.RFC3339),
 	}
 }
 
