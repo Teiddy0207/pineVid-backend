@@ -56,6 +56,26 @@ func (r *V1) markNotificationRead(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(fiber.Map{"success": true})
 }
 
+// @Summary      Mark all notifications as read
+// @Description  Mark every unread notification for the authenticated user as read
+// @Tags         Notification
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} map[string]bool
+// @Failure      500 {object} response.Error
+// @Router       /v1/notifications/read-all [post]
+func (r *V1) markAllNotificationsRead(ctx *fiber.Ctx) error {
+	userID := getUserID(ctx)
+
+	if err := r.notif.MarkAllAsRead(ctx.UserContext(), userID); err != nil {
+		r.l.Error(err, "restapi - v1 - markAllNotificationsRead")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to mark all notifications as read")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+}
+
 // @Summary      Realtime SSE Notification Stream
 // @Description  Stream real-time notifications for the authenticated user via SSE
 // @Tags         Notification

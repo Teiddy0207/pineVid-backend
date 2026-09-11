@@ -11,8 +11,8 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hs: hs, fw: fw, notif: nt, vocab: vb, sub: sub, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, up usecase.UserPreference, sv usecase.SavedVideo, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+	r := &V1{t: t, u: u, tk: tk, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, rc: rc, hs: hs, fw: fw, notif: nt, vocab: vb, sub: sub, up: up, sv: sv, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
@@ -47,6 +47,12 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	{
 		videosProtectedGroup.Post("/:id/like", r.toggleLikeVideo)
 		videosProtectedGroup.Post("/:id/comments", r.createComment)
+		videosProtectedGroup.Post("/:id/save", r.toggleSaveVideo)
+	}
+
+	commentsProtectedGroup := apiV1Group.Group("/comments", middleware.Auth(jwtManager))
+	{
+		commentsProtectedGroup.Post("/:id/like", r.toggleLikeComment)
 	}
 
 	channelsPublicGroup := apiV1Group.Group("/channels", middleware.OptionalAuth(jwtManager))
@@ -84,6 +90,7 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 	notifGroup := protected.Group("/notifications")
 	{
 		notifGroup.Get("/", r.listNotifications)
+		notifGroup.Post("/read-all", r.markAllNotificationsRead)
 		notifGroup.Post("/:id/read", r.markNotificationRead)
 	}
 
@@ -93,6 +100,9 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		userGroup.Put("/profile", r.updateProfile)
 		userGroup.Get("/history", r.getWatchHistory)
 		userGroup.Get("/following", r.listFollowedChannels)
+		userGroup.Put("/preferences", r.setUserPreferences)
+		userGroup.Get("/preferences", r.getUserPreferences)
+		userGroup.Get("/saved", r.listSavedVideos)
 	}
 
 	protected.Post("/channels/:id/follow", r.toggleFollowChannel)
@@ -107,8 +117,10 @@ func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, t
 		studioGroup.Put("/videos/:id", r.updateVideo)
 		studioGroup.Put("/videos/:id/thumbnail", r.updateThumbnail)
 		studioGroup.Delete("/videos/:id", r.deleteVideo)
+		studioGroup.Post("/videos/:id/retry", r.retryTranscode)
 		studioGroup.Get("/live/key", r.getStreamKey)
 		studioGroup.Post("/live/reset-key", r.resetStreamKey)
+		studioGroup.Put("/live/info", r.updateStreamInfo)
 	}
 
 

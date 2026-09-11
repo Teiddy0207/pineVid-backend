@@ -12,6 +12,7 @@ func ToUserResponse(u entity.User) response.UserResponse {
 		Username:  u.Username,
 		Email:     u.Email,
 		Avatar:    u.Avatar,
+		Role:      string(u.Role),
 		IsBanned:  u.IsBanned,
 		CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}

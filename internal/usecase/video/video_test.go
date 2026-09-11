@@ -30,6 +30,7 @@ func (f *fakeNotification) ListNotifications(context.Context, string, int, int) 
 	return response.NotificationListResponse{}, nil
 }
 func (f *fakeNotification) MarkAsRead(context.Context, string, string) error { return nil }
+func (f *fakeNotification) MarkAllAsRead(context.Context, string) error      { return nil }
 func (f *fakeNotification) SubscribeNotifications(string) (<-chan response.NotificationResponse, func(), error) {
 	return nil, func() {}, nil
 }
@@ -76,7 +77,7 @@ func TestCreateUpload_Visibility(t *testing.T) {
 			t.Parallel()
 
 			repo := new(MockVideoRepo)
-			uc := video.New(repo, nil, nil, nil)
+			uc := video.New(repo, nil, nil, nil, nil, nil)
 
 			repo.On("Store", mock.Anything, mock.MatchedBy(func(v *entity.Video) bool {
 				return v.Visibility == tc.want
@@ -98,7 +99,7 @@ func TestCreateUpload_UnsupportedExtension(t *testing.T) {
 	t.Parallel()
 
 	repo := new(MockVideoRepo)
-	uc := video.New(repo, nil, nil, nil)
+	uc := video.New(repo, nil, nil, nil, nil, nil)
 
 	_, err := uc.CreateUpload(context.Background(), "user-1", request.CreateVideoUpload{
 		Title:    "Sketchy file",
@@ -114,7 +115,7 @@ func TestHandleTranscodeCallback_NotifiesFollowersOnFirstPublicComplete(t *testi
 
 	repo := new(MockVideoRepo)
 	notif := newFakeNotification()
-	uc := video.New(repo, nil, nil, notif)
+	uc := video.New(repo, nil, nil, nil, nil, notif)
 
 	existing := entity.Video{
 		ID: "v1", UserID: "user-1", Status: entity.VideoStatusProcessing,
@@ -134,7 +135,7 @@ func TestHandleTranscodeCallback_NoNotifyWhenAlreadyComplete(t *testing.T) {
 
 	repo := new(MockVideoRepo)
 	notif := newFakeNotification()
-	uc := video.New(repo, nil, nil, notif)
+	uc := video.New(repo, nil, nil, nil, nil, notif)
 
 	existing := entity.Video{
 		ID: "v2", UserID: "user-1", Status: entity.VideoStatusComplete,
@@ -156,7 +157,7 @@ func TestHandleTranscodeCallback_NoNotifyWhenPrivate(t *testing.T) {
 
 	repo := new(MockVideoRepo)
 	notif := newFakeNotification()
-	uc := video.New(repo, nil, nil, notif)
+	uc := video.New(repo, nil, nil, nil, nil, notif)
 
 	existing := entity.Video{
 		ID: "v3", UserID: "user-1", Status: entity.VideoStatusProcessing,
@@ -176,7 +177,7 @@ func TestHandleTranscodeCallback_NoNotifyWhenFailed(t *testing.T) {
 
 	repo := new(MockVideoRepo)
 	notif := newFakeNotification()
-	uc := video.New(repo, nil, nil, notif)
+	uc := video.New(repo, nil, nil, nil, nil, notif)
 
 	existing := entity.Video{
 		ID: "v4", UserID: "user-1", Status: entity.VideoStatusProcessing,
@@ -192,4 +193,55 @@ func TestHandleTranscodeCallback_NoNotifyWhenFailed(t *testing.T) {
 	require.NoError(t, err)
 	notif.expectNoCall(t)
 	assert.Equal(t, "v4", existing.ID) // sanity: existing struct untouched by pointer aliasing surprises
+}
+
+func TestRetryTranscode_RequeuesFailedVideo(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockVideoRepo)
+	uc := video.New(repo, nil, nil, nil, nil, nil)
+
+	existing := entity.Video{
+		ID: "v5", UserID: "owner-1", Status: entity.VideoStatusFailed, RawS3Key: "raw-uploads/v5/raw.mp4",
+	}
+	repo.On("GetByID", mock.Anything, "v5").Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(v *entity.Video) bool {
+		return v.Status == entity.VideoStatusProcessing
+	})).Return(nil)
+
+	res, err := uc.RetryTranscode(context.Background(), "owner-1", "v5")
+
+	require.NoError(t, err)
+	assert.Equal(t, "v5", res.ID)
+	repo.AssertExpectations(t)
+}
+
+func TestRetryTranscode_ForbiddenForNonOwner(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockVideoRepo)
+	uc := video.New(repo, nil, nil, nil, nil, nil)
+
+	existing := entity.Video{ID: "v6", UserID: "owner-1", Status: entity.VideoStatusFailed}
+	repo.On("GetByID", mock.Anything, "v6").Return(existing, nil)
+
+	_, err := uc.RetryTranscode(context.Background(), "someone-else", "v6")
+
+	require.ErrorIs(t, err, entity.ErrVideoForbidden)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+}
+
+func TestRetryTranscode_ErrorsWhenNotFailed(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockVideoRepo)
+	uc := video.New(repo, nil, nil, nil, nil, nil)
+
+	existing := entity.Video{ID: "v7", UserID: "owner-1", Status: entity.VideoStatusComplete}
+	repo.On("GetByID", mock.Anything, "v7").Return(existing, nil)
+
+	_, err := uc.RetryTranscode(context.Background(), "owner-1", "v7")
+
+	require.ErrorIs(t, err, entity.ErrVideoNotFailed)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
 }

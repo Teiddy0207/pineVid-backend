@@ -34,6 +34,7 @@ type pendingEnd struct {
 type UseCase struct {
 	repo          repo.LivestreamRepo
 	videoRepo     repo.VideoRepo
+	followRepo    repo.FollowRepo
 	chatHub       *events.ChatHub
 	notifUc       usecase.Notification
 	minioClient   *pkgminio.Client
@@ -47,17 +48,30 @@ type UseCase struct {
 }
 
 func New(
-	r repo.LivestreamRepo, vr repo.VideoRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
+	r repo.LivestreamRepo, vr repo.VideoRepo, followRepo repo.FollowRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
 	minioClient *pkgminio.Client, natsPublisher *nats.Publisher, rawBucket, dvrLocalDir string,
 	graceDuration time.Duration,
 ) *UseCase {
 	return &UseCase{
-		repo: r, videoRepo: vr, chatHub: chatHub, notifUc: notifUc,
+		repo: r, videoRepo: vr, followRepo: followRepo, chatHub: chatHub, notifUc: notifUc,
 		minioClient: minioClient, natsPublisher: natsPublisher,
 		rawBucket: rawBucket, dvrLocalDir: dvrLocalDir,
 		graceDuration: graceDuration,
 		pending:       make(map[string]*pendingEnd),
 	}
+}
+
+// withFollowersCount enriches an already-mapped LivestreamResponse with the
+// streamer's real follower count. Best-effort: a lookup failure just leaves
+// the count at its zero value rather than failing the whole response.
+func (u *UseCase) withFollowersCount(ctx context.Context, res response.LivestreamResponse) response.LivestreamResponse {
+	if u.followRepo == nil {
+		return res
+	}
+	if count, err := u.followRepo.CountFollowers(ctx, res.Streamer.ID); err == nil {
+		res.Streamer.FollowersCount = count
+	}
+	return res
 }
 
 func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error) {
@@ -86,8 +100,11 @@ func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.Str
 	}
 
 	return response.StreamKeyResponse{
-		ServerUrl: "rtmp://live.pipevid.com/live",
-		StreamKey: ls.StreamKey,
+		ServerUrl:    "rtmp://live.pipevid.com/live",
+		StreamKey:    ls.StreamKey,
+		IsLive:       ls.IsLive,
+		StartedAt:    ls.StartedAt,
+		ViewersCount: ls.ViewersCount,
 	}, nil
 }
 
@@ -105,8 +122,11 @@ func (u *UseCase) ResetStreamKey(ctx context.Context, userID string) (response.S
 	}
 
 	return response.StreamKeyResponse{
-		ServerUrl: "rtmp://live.pipevid.com/live",
-		StreamKey: ls.StreamKey,
+		ServerUrl:    "rtmp://live.pipevid.com/live",
+		StreamKey:    ls.StreamKey,
+		IsLive:       ls.IsLive,
+		StartedAt:    ls.StartedAt,
+		ViewersCount: ls.ViewersCount,
 	}, nil
 }
 
@@ -336,11 +356,11 @@ func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.Livest
 				mockLs.Category = "Music"
 				mockLs.ViewersCount = 0
 			}
-			return mapper.ToLivestreamResponse(mockLs), nil
+			return u.withFollowersCount(ctx, mapper.ToLivestreamResponse(mockLs)), nil
 		}
 		return response.LivestreamResponse{}, err
 	}
-	return mapper.ToLivestreamResponse(ls), nil
+	return u.withFollowersCount(ctx, mapper.ToLivestreamResponse(ls)), nil
 }
 
 func (u *UseCase) ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error) {
@@ -350,7 +370,11 @@ func (u *UseCase) ListActiveStreams(ctx context.Context, category string, page, 
 		return response.PageResponse[response.LivestreamResponse]{}, err
 	}
 
-	return mapper.ToLivestreamPageResponse(streams, total, page, limit), nil
+	pageResp := mapper.ToLivestreamPageResponse(streams, total, page, limit)
+	for i := range pageResp.Data {
+		pageResp.Data[i] = u.withFollowersCount(ctx, pageResp.Data[i])
+	}
+	return pageResp, nil
 }
 
 func (u *UseCase) UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error) {

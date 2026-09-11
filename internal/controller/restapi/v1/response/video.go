@@ -22,6 +22,9 @@ type VideoResponse struct {
 	ThumbnailUrl string       `json:"thumbnail_url" example:"https://s3.pipevid.com/thumbnails/space.jpg"`
 	Duration     string       `json:"duration"      example:"18:42"`
 	Views        int64        `json:"views"         example:"24812"`
+	LikesCount   int64        `json:"likes_count"   example:"312"`
+	IsLiked      bool         `json:"is_liked"`
+	IsSaved      bool         `json:"is_saved"`
 	CreatedAt    time.Time    `json:"created_at"`
 	UpdatedAt    time.Time    `json:"updated_at"`
 } // @name response.VideoResponse

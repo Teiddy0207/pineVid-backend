@@ -70,8 +70,9 @@ func (r *V1) listPublicVideos(ctx *fiber.Ctx) error {
 // @Router       /v1/videos/{id} [get]
 func (r *V1) getVideo(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
+	userID, _ := ctx.Locals("userID").(string)
 
-	resDTO, err := r.vd.GetByID(ctx.UserContext(), id)
+	resDTO, err := r.vd.GetByID(ctx.UserContext(), id, userID)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - getVideo")
 		if errors.Is(err, entity.ErrVideoNotFound) {
@@ -163,8 +164,9 @@ func (r *V1) listStudioVideos(ctx *fiber.Ctx) error {
 	userID := getUserID(ctx)
 	page := ctx.QueryInt("page", 1)
 	limit := ctx.QueryInt("limit", 10)
+	query := ctx.Query("q")
 
-	pageDTO, err := r.vd.ListStudioVideos(ctx.UserContext(), userID, page, limit)
+	pageDTO, err := r.vd.ListStudioVideos(ctx.UserContext(), userID, query, page, limit)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - listStudioVideos")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to list studio videos")
@@ -419,6 +421,40 @@ func (r *V1) deleteVideo(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(fiber.Map{
 		"message": "video deleted successfully",
 	})
+}
+
+// @Summary      Retry a failed video transcode
+// @Description  Re-queues a NATS transcode job for a video whose previous transcode attempt failed, reusing the already-uploaded raw file
+// @Tags         Studio
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Success      200 {object} response.VideoResponse
+// @Failure      403 {object} response.Error
+// @Failure      404 {object} response.Error
+// @Failure      409 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/videos/{id}/retry [post]
+func (r *V1) retryTranscode(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	userID := getUserID(ctx)
+
+	resDTO, err := r.vd.RetryTranscode(ctx.UserContext(), userID, id)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - retryTranscode")
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFailed) {
+			return errorResponse(ctx, http.StatusConflict, err.Error())
+		}
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to retry transcode")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
 }
 
 // @Summary      Get video subtitles

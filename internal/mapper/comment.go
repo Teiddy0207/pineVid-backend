@@ -27,9 +27,10 @@ func ToCommentResponse(c entity.Comment) response.CommentResponse {
 			Name:   c.UserName,
 			Avatar: c.UserAvatar,
 		},
-		Content:   c.Content,
-		ParentID:  c.ParentID,
-		CreatedAt: c.CreatedAt,
+		Content:    c.Content,
+		ParentID:   c.ParentID,
+		ReplyCount: c.ReplyCount,
+		CreatedAt:  c.CreatedAt,
 	}
 }
 
@@ -56,5 +57,19 @@ func ToCommentPageResponse(comments []entity.Comment, totalItems, page, limit in
 			CurrentPage: page,
 			Limit:       limit,
 		},
+	}
+}
+
+// ToCommentPageResponseWithTotal is ToCommentPageResponse plus totalAllCount
+// (top-level + replies) — used only for the main video comment listing,
+// where the header comment count must include replies even though
+// pagination itself only ever walks top-level comments.
+func ToCommentPageResponseWithTotal(comments []entity.Comment, totalItems, totalAllCount, page, limit int) response.CommentPageResponse {
+	base := ToCommentPageResponse(comments, totalItems, page, limit)
+	return response.CommentPageResponse{
+		Success:       base.Success,
+		Data:          base.Data,
+		Pagination:    base.Pagination,
+		TotalAllCount: totalAllCount,
 	}
 }

@@ -16,14 +16,15 @@ import (
 const workerStaleAfter = 30 * time.Second
 
 type UseCase struct {
-	lsRepo repo.LivestreamRepo
-	vRepo  repo.VideoRepo
-	uRepo  repo.UserRepo
-	wRepo  repo.WorkerRepo
+	lsRepo    repo.LivestreamRepo
+	vRepo     repo.VideoRepo
+	uRepo     repo.UserRepo
+	wRepo     repo.WorkerRepo
+	statsRepo repo.AdminStatsRepo
 }
 
-func New(ls repo.LivestreamRepo, v repo.VideoRepo, u repo.UserRepo, w repo.WorkerRepo) *UseCase {
-	return &UseCase{lsRepo: ls, vRepo: v, uRepo: u, wRepo: w}
+func New(ls repo.LivestreamRepo, v repo.VideoRepo, u repo.UserRepo, w repo.WorkerRepo, stats repo.AdminStatsRepo) *UseCase {
+	return &UseCase{lsRepo: ls, vRepo: v, uRepo: u, wRepo: w, statsRepo: stats}
 }
 
 func (u *UseCase) GetDashboard(ctx context.Context) (response.SystemDashboardResponse, error) {
@@ -47,11 +48,30 @@ func (u *UseCase) GetDashboard(ctx context.Context) (response.SystemDashboardRes
 		return response.SystemDashboardResponse{}, fmt.Errorf("AdminUseCase - GetDashboard - wRepo.ListActive: %w", err)
 	}
 
+	channelStats, err := u.statsRepo.ChannelStats(ctx)
+	if err != nil {
+		return response.SystemDashboardResponse{}, fmt.Errorf("AdminUseCase - GetDashboard - statsRepo.ChannelStats: %w", err)
+	}
+
+	categoryBreakdown, err := u.statsRepo.CategoryBreakdown(ctx)
+	if err != nil {
+		return response.SystemDashboardResponse{}, fmt.Errorf("AdminUseCase - GetDashboard - statsRepo.CategoryBreakdown: %w", err)
+	}
+
+	categoryResp := make([]response.CategoryStatResponse, len(categoryBreakdown))
+	for i, c := range categoryBreakdown {
+		categoryResp[i] = response.CategoryStatResponse{Category: c.Category, VideoCount: c.VideoCount}
+	}
+
 	return response.SystemDashboardResponse{
 		TotalVideos:       int64(totalVideos),
 		ActiveLivestreams: activeLivestreams,
 		ActiveWorkers:     int64(len(activeWorkers)),
 		TotalViewers:      totalViewers,
+		TotalChannels:     channelStats.TotalChannels,
+		ActiveChannels:    channelStats.ActiveChannels,
+		BannedChannels:    channelStats.BannedChannels,
+		CategoryBreakdown: categoryResp,
 	}, nil
 }
 

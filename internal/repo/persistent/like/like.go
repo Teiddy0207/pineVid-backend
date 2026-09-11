@@ -2,6 +2,7 @@ package like
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/pkg/postgres"
 	redispkg "github.com/evrone/go-clean-template/pkg/redis"
+	"github.com/jackc/pgx/v5"
 )
 
 type Repo struct {
@@ -91,4 +93,53 @@ func (r *Repo) IncrementHeart(ctx context.Context, streamID string) (int64, erro
 		return r.Redis.Client.Incr(ctx, key).Result()
 	}
 	return 1, nil
+}
+
+// GetLikeCount returns the durable like count from Postgres — unlike the
+// Redis counter ToggleLike maintains for fast increments/decrements, this is
+// never reset by a Redis flush, so it's the right source for a fresh page
+// load (GET /videos/:id) rather than the ephemeral cache.
+func (r *Repo) GetLikeCount(ctx context.Context, videoID string) (int64, error) {
+	sql, args, err := r.Builder.
+		Select("COUNT(*)").
+		From("likes").
+		Where(squirrel.Eq{"video_id": videoID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("LikeRepo - GetLikeCount - ToSql: %w", err)
+	}
+
+	var count int64
+	if err := r.Pool.QueryRow(ctx, sql, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("LikeRepo - GetLikeCount - QueryRow: %w", err)
+	}
+	return count, nil
+}
+
+// IsLikedByUser reports whether userID currently has an active like on
+// videoID. userID may be empty (anonymous caller) — in that case this
+// always returns false rather than erroring.
+func (r *Repo) IsLikedByUser(ctx context.Context, videoID, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+
+	sql, args, err := r.Builder.
+		Select("1").
+		From("likes").
+		Where(squirrel.Eq{"video_id": videoID, "user_id": userID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("LikeRepo - IsLikedByUser - ToSql: %w", err)
+	}
+
+	var exists int
+	err = r.Pool.QueryRow(ctx, sql, args...).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("LikeRepo - IsLikedByUser - QueryRow: %w", err)
+	}
+	return true, nil
 }

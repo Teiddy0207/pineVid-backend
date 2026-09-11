@@ -171,6 +171,37 @@ func (r *V1) resetStreamKey(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(keyDTO)
 }
 
+// @Summary      Update streamer's live stream info
+// @Description  Update title/category for the authenticated streamer's own livestream row
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body request.UpdateLivestreamInfo true "Livestream info update"
+// @Success      200 {object} response.LivestreamResponse
+// @Failure      400 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/live/info [put]
+func (r *V1) updateStreamInfo(ctx *fiber.Ctx) error {
+	userID := getUserID(ctx)
+
+	var req request.UpdateLivestreamInfo
+	if err := ctx.BodyParser(&req); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+	if err := r.v.Struct(req); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+
+	resDTO, err := r.ls.UpdateStreamInfo(ctx.UserContext(), userID, req)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - updateStreamInfo")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to update stream info")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
+}
+
 // srsHookRejected/srsHookAccepted are the JSON bodies SRS's HTTP callback
 // protocol expects: {"code": 0} means accepted, any other code rejects the
 // publish/unpublish action. A plain-text body (the old behavior here) is not

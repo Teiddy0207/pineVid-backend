@@ -136,6 +136,8 @@ services:
     platform: linux/amd64
     dns:
       - 127.0.0.11
+      - 8.8.8.8
+      - 1.1.1.1
     build:
       context: .
     environment:

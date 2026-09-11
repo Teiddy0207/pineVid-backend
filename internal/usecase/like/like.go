@@ -6,16 +6,16 @@ import (
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/mapper"
-	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
+	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/evrone/go-clean-template/pkg/nats"
 )
 
 type UseCase struct {
-	repo          *persistLikeRepo.Repo
+	repo          repo.LikeRepo
 	natsPublisher *nats.Publisher
 }
 
-func New(r *persistLikeRepo.Repo, natsPub *nats.Publisher) *UseCase {
+func New(r repo.LikeRepo, natsPub *nats.Publisher) *UseCase {
 	return &UseCase{
 		repo:          r,
 		natsPublisher: natsPub,

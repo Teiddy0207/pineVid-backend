@@ -149,7 +149,7 @@ func (uc *UseCase) LookupWord(ctx context.Context, word string) (response.Dictio
 
 	go func() {
 		defer wg.Done()
-		trans.VI = translateText(ctx, clean, "AUTODETECT|vi")
+		trans.VI = translateText(ctx, clean, "en|vi")
 		if trans.VI == "" {
 			trans.VI = fmt.Sprintf("Từ vựng: \"%s\"", clean)
 		}
@@ -157,32 +157,32 @@ func (uc *UseCase) LookupWord(ctx context.Context, word string) (response.Dictio
 
 	go func() {
 		defer wg.Done()
-		trans.JA = translateText(ctx, clean, "AUTODETECT|ja")
+		trans.JA = translateText(ctx, clean, "en|ja")
 	}()
 
 	go func() {
 		defer wg.Done()
-		trans.FR = translateText(ctx, clean, "AUTODETECT|fr")
+		trans.FR = translateText(ctx, clean, "en|fr")
 	}()
 
 	go func() {
 		defer wg.Done()
-		trans.ES = translateText(ctx, clean, "AUTODETECT|es")
+		trans.ES = translateText(ctx, clean, "en|es")
 	}()
 
 	go func() {
 		defer wg.Done()
-		trans.DE = translateText(ctx, clean, "AUTODETECT|de")
+		trans.DE = translateText(ctx, clean, "en|de")
 	}()
 
 	go func() {
 		defer wg.Done()
-		trans.ZH = translateText(ctx, clean, "AUTODETECT|zh")
+		trans.ZH = translateText(ctx, clean, "en|zh")
 	}()
 
 	go func() {
 		defer wg.Done()
-		trans.KO = translateText(ctx, clean, "AUTODETECT|ko")
+		trans.KO = translateText(ctx, clean, "en|ko")
 	}()
 
 	wg.Wait()

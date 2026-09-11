@@ -21,14 +21,18 @@ import (
 type UseCase struct {
 	repo          repo.VideoRepo
 	viewRepo      *view.Repo
+	likeRepo      repo.LikeRepo
+	savedRepo     repo.SavedVideoRepo
 	natsPublisher *nats.Publisher
 	notifUc       usecase.Notification
 }
 
-func New(r repo.VideoRepo, vRepo *view.Repo, natsPub *nats.Publisher, notifUc usecase.Notification) *UseCase {
+func New(r repo.VideoRepo, vRepo *view.Repo, likeRepo repo.LikeRepo, savedRepo repo.SavedVideoRepo, natsPub *nats.Publisher, notifUc usecase.Notification) *UseCase {
 	return &UseCase{
 		repo:          r,
 		viewRepo:      vRepo,
+		likeRepo:      likeRepo,
+		savedRepo:     savedRepo,
 		natsPublisher: natsPub,
 		notifUc:       notifUc,
 	}
@@ -92,7 +96,10 @@ func (u *UseCase) ConfirmUpload(ctx context.Context, userID string, req request.
 	return mapper.ToVideoResponse(v), nil
 }
 
-func (u *UseCase) GetByID(ctx context.Context, id string) (response.VideoResponse, error) {
+// GetByID fetches a single video for display. userID is the current
+// viewer's ID if authenticated, or "" for an anonymous caller — it's used to
+// resolve IsLiked (LikesCount itself is not viewer-specific).
+func (u *UseCase) GetByID(ctx context.Context, id, userID string) (response.VideoResponse, error) {
 	v, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return response.VideoResponse{}, err
@@ -100,7 +107,22 @@ func (u *UseCase) GetByID(ctx context.Context, id string) (response.VideoRespons
 	if u.viewRepo != nil {
 		v.Views += u.viewRepo.GetPendingViewsForVideo(ctx, id)
 	}
-	return mapper.ToVideoResponse(v), nil
+
+	resDTO := mapper.ToVideoResponse(v)
+	if u.likeRepo != nil {
+		if count, err := u.likeRepo.GetLikeCount(ctx, id); err == nil {
+			resDTO.LikesCount = count
+		}
+		if liked, err := u.likeRepo.IsLikedByUser(ctx, id, userID); err == nil {
+			resDTO.IsLiked = liked
+		}
+	}
+	if u.savedRepo != nil {
+		if saved, err := u.savedRepo.IsSavedByUser(ctx, id, userID); err == nil {
+			resDTO.IsSaved = saved
+		}
+	}
+	return resDTO, nil
 }
 
 func (u *UseCase) ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
@@ -126,11 +148,12 @@ func (u *UseCase) ListPublicVideos(ctx context.Context, userID, category, query 
 	return mapper.ToVideoPageResponse(videos, total, page, limit), nil
 }
 
-func (u *UseCase) ListStudioVideos(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+func (u *UseCase) ListStudioVideos(ctx context.Context, userID, query string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
 	offset := (page - 1) * limit
 
 	filter := repo.VideoFilter{
 		UserID: userID,
+		Query:  query,
 		Limit:  uint64(limit),
 		Offset: uint64(offset),
 	}
@@ -214,6 +237,36 @@ func (u *UseCase) UpdateThumbnail(ctx context.Context, userID, videoID string, r
 
 	if err := u.repo.Update(ctx, &v); err != nil {
 		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - UpdateThumbnail - Update: %w", err)
+	}
+
+	return mapper.ToVideoResponse(v), nil
+}
+
+// RetryTranscode re-queues a NATS transcode job for a video whose previous
+// attempt failed, reusing the already-uploaded raw file — the owner doesn't
+// need to re-upload from scratch.
+func (u *UseCase) RetryTranscode(ctx context.Context, userID, videoID string) (response.VideoResponse, error) {
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return response.VideoResponse{}, err
+	}
+	if v.UserID != userID {
+		return response.VideoResponse{}, entity.ErrVideoForbidden
+	}
+	if v.Status != entity.VideoStatusFailed {
+		return response.VideoResponse{}, entity.ErrVideoNotFailed
+	}
+
+	v.Status = entity.VideoStatusProcessing
+	v.UpdatedAt = time.Now().UTC()
+	if err := u.repo.Update(ctx, &v); err != nil {
+		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - RetryTranscode - Update: %w", err)
+	}
+
+	if u.natsPublisher != nil {
+		if err := u.natsPublisher.PublishTranscodeJob(v.ID, v.RawS3Key, userID); err != nil {
+			return response.VideoResponse{}, fmt.Errorf("VideoUseCase - RetryTranscode - PublishTranscodeJob: %w", err)
+		}
 	}
 
 	return mapper.ToVideoResponse(v), nil

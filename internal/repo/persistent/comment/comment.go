@@ -65,7 +65,8 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Comment, error) {
 
 // ListByVideoID returns top-level comments only — replies are fetched
 // separately via ListRepliesByParentID so a video's main comment feed isn't
-// diluted by nested replies.
+// diluted by nested replies. Each comment carries ReplyCount so the FE can
+// show "View N replies" without fetching them first.
 func (r *Repo) ListByVideoID(ctx context.Context, videoID string, limit, offset uint64) ([]entity.Comment, int, error) {
 	countSql, countArgs, err := r.Builder.
 		Select("COUNT(*)").
@@ -82,10 +83,14 @@ func (r *Repo) ListByVideoID(ctx context.Context, videoID string, limit, offset 
 	}
 
 	sql, args, err := r.Builder.
-		Select("id", "video_id", "user_id", "user_name", "user_avatar", "content", "parent_id", "created_at").
+		Select(
+			"comments.id", "comments.video_id", "comments.user_id", "comments.user_name",
+			"comments.user_avatar", "comments.content", "comments.parent_id", "comments.created_at",
+			"(SELECT COUNT(*) FROM comments r WHERE r.parent_id = comments.id) AS reply_count",
+		).
 		From("comments").
-		Where(squirrel.Eq{"video_id": videoID, "parent_id": nil}).
-		OrderBy("created_at DESC").
+		Where(squirrel.Eq{"comments.video_id": videoID, "comments.parent_id": nil}).
+		OrderBy("comments.created_at DESC").
 		Limit(limit).
 		Offset(offset).
 		ToSql()
@@ -102,13 +107,33 @@ func (r *Repo) ListByVideoID(ctx context.Context, videoID string, limit, offset 
 	comments := make([]entity.Comment, 0)
 	for rows.Next() {
 		var c entity.Comment
-		if err := rows.Scan(&c.ID, &c.VideoID, &c.UserID, &c.UserName, &c.UserAvatar, &c.Content, &c.ParentID, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.VideoID, &c.UserID, &c.UserName, &c.UserAvatar, &c.Content, &c.ParentID, &c.CreatedAt, &c.ReplyCount); err != nil {
 			return nil, 0, fmt.Errorf("CommentRepo - ListByVideoID - Scan: %w", err)
 		}
 		comments = append(comments, c)
 	}
 
 	return comments, total, nil
+}
+
+// CountAllByVideoID counts every comment on a video, top-level and replies
+// alike — used for the header "Comments (N)" figure, which must include
+// replies even though ListByVideoID's pagination total deliberately doesn't.
+func (r *Repo) CountAllByVideoID(ctx context.Context, videoID string) (int, error) {
+	sql, args, err := r.Builder.
+		Select("COUNT(*)").
+		From("comments").
+		Where(squirrel.Eq{"video_id": videoID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("CommentRepo - CountAllByVideoID - ToSql: %w", err)
+	}
+
+	var total int
+	if err := r.Pool.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("CommentRepo - CountAllByVideoID - QueryRow: %w", err)
+	}
+	return total, nil
 }
 
 // ListRepliesByParentID returns replies to a single top-level comment,

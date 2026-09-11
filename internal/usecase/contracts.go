@@ -41,13 +41,14 @@ type (
 	Video interface {
 		CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error)
 		ConfirmUpload(ctx context.Context, userID string, req request.ConfirmUpload) (response.VideoResponse, error)
-		GetByID(ctx context.Context, id string) (response.VideoResponse, error)
+		GetByID(ctx context.Context, id, userID string) (response.VideoResponse, error)
 		ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error)
-		ListStudioVideos(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
+		ListStudioVideos(ctx context.Context, userID, query string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		PublishVideo(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error)
 		UpdateThumbnail(ctx context.Context, userID, videoID string, req request.UpdateThumbnail) (response.VideoResponse, error)
 		DeleteVideo(ctx context.Context, userID, videoID string) error
+		RetryTranscode(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error
 		RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error)
 	}
@@ -107,8 +108,9 @@ type (
 	// Comment -.
 	Comment interface {
 		CreateComment(ctx context.Context, videoID, userID, userName, userAvatar string, req request.CreateCommentRequest) (response.CommentResponse, error)
-		ListVideoComments(ctx context.Context, videoID string, page, limit int) (response.PageResponse[response.CommentResponse], error)
-		ListReplies(ctx context.Context, parentID string, page, limit int) (response.PageResponse[response.CommentResponse], error)
+		ListVideoComments(ctx context.Context, videoID, userID string, page, limit int) (response.CommentPageResponse, error)
+		ListReplies(ctx context.Context, parentID, userID string, page, limit int) (response.PageResponse[response.CommentResponse], error)
+		ToggleLikeComment(ctx context.Context, commentID, userID string) (response.CommentLikeResponse, error)
 	}
 
 	// Recommendation -.
@@ -116,10 +118,23 @@ type (
 		GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error)
 	}
 
+	// SavedVideo -.
+	SavedVideo interface {
+		ToggleSaveVideo(ctx context.Context, userID, videoID string) (response.SaveVideoResponse, error)
+		ListSavedVideos(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
+	}
+
+	// UserPreference -.
+	UserPreference interface {
+		SetPreferredCategories(ctx context.Context, userID string, categories []string) error
+		GetPreferredCategories(ctx context.Context, userID string) ([]string, error)
+	}
+
 	// Notification -.
 	Notification interface {
 		ListNotifications(ctx context.Context, userID string, page, limit int) (response.NotificationListResponse, error)
 		MarkAsRead(ctx context.Context, id, userID string) error
+		MarkAllAsRead(ctx context.Context, userID string) error
 		SubscribeNotifications(userID string) (<-chan response.NotificationResponse, func(), error)
 		NotifyFollowers(ctx context.Context, senderID, senderName, senderAvatar string, notifType entity.NotificationType, title, message, targetURL string) error
 	}

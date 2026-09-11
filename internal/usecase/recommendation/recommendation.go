@@ -19,6 +19,7 @@ import (
 type UseCase struct {
 	repo      *persistRecRepo.Repo
 	videoRepo repo.VideoRepo
+	prefRepo  repo.UserPreferenceRepo
 	factors   int
 	gamma     float64 // Learning rate
 	lambda    float64 // Regularization
@@ -30,16 +31,26 @@ type UseCase struct {
 	videoVec       map[string][]float64 // trained Q, keyed by videoID
 }
 
-func New(r *persistRecRepo.Repo, vr repo.VideoRepo) *UseCase {
+func New(r *persistRecRepo.Repo, vr repo.VideoRepo, pr repo.UserPreferenceRepo) *UseCase {
 	return &UseCase{
 		repo:      r,
 		videoRepo: vr,
+		prefRepo:  pr,
 		factors:   10,
 		gamma:     0.01,
 		lambda:    0.02,
 		epochs:    50,
 	}
 }
+
+// categoryBoost is added to a video's score when its category is one of the
+// caller's preferred categories. It only ever gets applied in cold-start
+// paths (see GetPersonalizedFeed) — once a user has real interactions, the
+// trained model's dot-product score alone decides ranking. The constant is
+// picked large enough to dominate the views-based baseline for any
+// realistic view count, so a preferred-category video always outranks a
+// non-preferred one regardless of view count.
+const categoryBoost = 1_000_000.0
 
 // StartBackgroundTraining trains the model once immediately (so the cache is
 // warm before the server starts taking traffic), then keeps retraining on a
@@ -208,17 +219,38 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 		return response.PageResponse[response.RecommendedVideoItem]{}, fmt.Errorf("RecommendationUseCase - List: %w", err)
 	}
 
+	// Best-effort: an anonymous caller (empty userID) or a lookup failure
+	// just means no boost is applied, falling back to plain trending — never
+	// fail the whole feed over a preferences lookup.
+	preferredCategories := make(map[string]bool)
+	if userID != "" && u.prefRepo != nil {
+		if categories, prefErr := u.prefRepo.GetCategories(ctx, userID); prefErr == nil {
+			for _, c := range categories {
+				preferredCategories[c] = true
+			}
+		}
+	}
+
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
 	if u.trainedIsEmpty || u.userVec == nil {
 		// Cold-start fallback: no interactions exist anywhere yet (or the
-		// background trainer hasn't run for the first time).
+		// background trainer hasn't run for the first time). Still honor
+		// explicit category preference so onboarding isn't wasted even
+		// before the model has ever trained.
 		recs := make([]entity.RecommendedVideo, len(allVideos))
 		for i, v := range allVideos {
-			recs[i] = entity.RecommendedVideo{Video: v, PredictedScore: 1.0}
+			score := 1.0
+			if preferredCategories[v.Category] {
+				score += categoryBoost
+			}
+			recs[i] = entity.RecommendedVideo{Video: v, PredictedScore: score}
 		}
-		return mapper.ToPersonalizedFeedPageResponse(recs, totalVideos, page, limit), nil
+		sort.Slice(recs, func(i, j int) bool {
+			return recs[i].PredictedScore > recs[j].PredictedScore
+		})
+		return mapper.ToPersonalizedFeedPageResponse(paginate(recs, page, limit), totalVideos, page, limit), nil
 	}
 
 	userFactors, hasUser := u.userVec[userID]
@@ -238,6 +270,14 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 					score += pred
 				}
 			}
+		} else if preferredCategories[v.Category] {
+			// Cold-start for this specific user: the model has real signal
+			// for other users, but not this one yet. Bootstrap with their
+			// explicit onboarding preference until they generate real
+			// interactions — at which point `hasUser` becomes true and this
+			// boost stops applying, handing ranking fully back to the
+			// trained model.
+			score += categoryBoost
 		}
 		recs = append(recs, entity.RecommendedVideo{Video: v, PredictedScore: score})
 	}
@@ -247,5 +287,27 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 		return recs[i].PredictedScore > recs[j].PredictedScore
 	})
 
-	return mapper.ToPersonalizedFeedPageResponse(recs, len(recs), page, limit), nil
+	return mapper.ToPersonalizedFeedPageResponse(paginate(recs, page, limit), len(recs), page, limit), nil
+}
+
+// paginate slices an already-sorted recommendation list down to the
+// requested page/limit window. Without this, callers asking for e.g. 12
+// items would get back everything List() fetched (up to 50) — the
+// PaginationMeta would claim a small page while Data held dozens of items.
+func paginate(recs []entity.RecommendedVideo, page, limit int) []entity.RecommendedVideo {
+	if limit <= 0 {
+		return recs
+	}
+	if page < 1 {
+		page = 1
+	}
+	start := (page - 1) * limit
+	if start >= len(recs) {
+		return []entity.RecommendedVideo{}
+	}
+	end := start + limit
+	if end > len(recs) {
+		end = len(recs)
+	}
+	return recs[start:end]
 }

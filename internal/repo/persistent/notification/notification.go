@@ -107,6 +107,24 @@ func (r *Repository) MarkAsRead(ctx context.Context, id, userID string) error {
 	return nil
 }
 
+func (r *Repository) MarkAllAsRead(ctx context.Context, userID string) error {
+	sql, args, err := r.Builder.
+		Update("notifications").
+		Set("is_read", true).
+		Where(squirrel.Eq{"user_id": userID, "is_read": false}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("NotificationRepo - MarkAllAsRead - ToSql: %w", err)
+	}
+
+	_, err = r.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("NotificationRepo - MarkAllAsRead - Exec: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Repository) CountUnread(ctx context.Context, userID string) (int, error) {
 	sql, args, err := r.Builder.
 		Select("COUNT(*)").

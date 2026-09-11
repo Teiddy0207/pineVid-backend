@@ -23,6 +23,8 @@ type V1 struct {
 	notif   usecase.Notification
 	vocab   usecase.Vocabulary
 	sub     usecase.Subtitle
+	up      usecase.UserPreference
+	sv      usecase.SavedVideo
 	hub     *events.Hub
 	chatHub *events.ChatHub
 	l       logger.Interface

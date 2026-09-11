@@ -7,6 +7,7 @@ type UserResponse struct {
 	Username  string `json:"username"   example:"quanh_dep_trai"`
 	Email     string `json:"email"      example:"whoami20945@gmail.com"`
 	Avatar    string `json:"avatar"     example:"http://localhost:9000/raw-videos/avatars/user.jpg"`
+	Role      string `json:"role"       example:"user"`
 	IsBanned  bool   `json:"is_banned"`
 	CreatedAt string `json:"created_at" example:"2026-01-01T00:00:00Z"`
 } // @name response.UserResponse

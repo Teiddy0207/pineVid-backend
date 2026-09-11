@@ -113,6 +113,7 @@ type (
 		Store(ctx context.Context, notif *entity.Notification) error
 		ListByUserID(ctx context.Context, userID string, limit, offset int) ([]entity.Notification, int, error)
 		MarkAsRead(ctx context.Context, id, userID string) error
+		MarkAllAsRead(ctx context.Context, userID string) error
 		CountUnread(ctx context.Context, userID string) (int, error)
 	}
 
@@ -123,11 +124,46 @@ type (
 		DeleteWord(ctx context.Context, id, userID string) error
 	}
 
+	// AdminStatsRepo -.
+	AdminStatsRepo interface {
+		ChannelStats(ctx context.Context) (entity.ChannelStats, error)
+		CategoryBreakdown(ctx context.Context) ([]entity.CategoryStat, error)
+	}
+
 	// CommentRepo -.
 	CommentRepo interface {
 		Store(ctx context.Context, c *entity.Comment) error
 		GetByID(ctx context.Context, id string) (entity.Comment, error)
 		ListByVideoID(ctx context.Context, videoID string, limit, offset uint64) ([]entity.Comment, int, error)
 		ListRepliesByParentID(ctx context.Context, parentID string, limit, offset uint64) ([]entity.Comment, int, error)
+		CountAllByVideoID(ctx context.Context, videoID string) (int, error)
+	}
+
+	// UserPreferenceRepo -.
+	UserPreferenceRepo interface {
+		SetCategories(ctx context.Context, userID string, categories []string) error
+		GetCategories(ctx context.Context, userID string) ([]string, error)
+	}
+
+	// LikeRepo -.
+	LikeRepo interface {
+		ToggleLike(ctx context.Context, l *entity.VideoLike) (bool, int64, error)
+		IncrementHeart(ctx context.Context, streamID string) (int64, error)
+		GetLikeCount(ctx context.Context, videoID string) (int64, error)
+		IsLikedByUser(ctx context.Context, videoID, userID string) (bool, error)
+	}
+
+	// SavedVideoRepo -.
+	SavedVideoRepo interface {
+		ToggleSave(ctx context.Context, userID, videoID string) (bool, error)
+		IsSavedByUser(ctx context.Context, videoID, userID string) (bool, error)
+		ListSavedVideos(ctx context.Context, userID string, limit, offset int) ([]entity.Video, int, error)
+	}
+
+	// CommentLikeRepo -.
+	CommentLikeRepo interface {
+		ToggleLike(ctx context.Context, commentID, userID string) (bool, int64, error)
+		GetLikeCount(ctx context.Context, commentID string) (int64, error)
+		IsLikedByUser(ctx context.Context, commentID, userID string) (bool, error)
 	}
 )

@@ -18,5 +18,6 @@ type Comment struct {
 	UserAvatar string    `json:"user_avatar"`
 	Content    string    `json:"content"`
 	ParentID   *string   `json:"parent_id,omitempty"`
+	ReplyCount int       `json:"reply_count"`
 	CreatedAt  time.Time `json:"created_at"`
 }

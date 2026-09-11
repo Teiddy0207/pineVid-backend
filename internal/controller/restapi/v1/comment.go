@@ -87,7 +87,8 @@ func (r *V1) listVideoComments(ctx *fiber.Ctx) error {
 		limit = 10
 	}
 
-	pageResDTO, err := r.cm.ListVideoComments(ctx.UserContext(), videoID, page, limit)
+	userID := getUserID(ctx)
+	pageResDTO, err := r.cm.ListVideoComments(ctx.UserContext(), videoID, userID, page, limit)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - listVideoComments")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to fetch comments")
@@ -123,11 +124,38 @@ func (r *V1) listCommentReplies(ctx *fiber.Ctx) error {
 		limit = 10
 	}
 
-	pageResDTO, err := r.cm.ListReplies(ctx.UserContext(), parentID, page, limit)
+	userID := getUserID(ctx)
+	pageResDTO, err := r.cm.ListReplies(ctx.UserContext(), parentID, userID, page, limit)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - listCommentReplies")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to fetch replies")
 	}
 
 	return ctx.Status(http.StatusOK).JSON(pageResDTO)
+}
+
+// @Summary      Toggle like on a comment
+// @Description  Like or unlike a comment/reply as the authenticated user
+// @Tags         Comment
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Comment ID"
+// @Success      200 {object} response.CommentLikeResponse
+// @Failure      400 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/comments/{id}/like [post]
+func (r *V1) toggleLikeComment(ctx *fiber.Ctx) error {
+	commentID := ctx.Params("id")
+	if commentID == "" {
+		return errorResponse(ctx, http.StatusBadRequest, "comment id required")
+	}
+
+	userID := getUserID(ctx)
+	resDTO, err := r.cm.ToggleLikeComment(ctx.UserContext(), commentID, userID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - toggleLikeComment")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to toggle comment like")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(resDTO)
 }

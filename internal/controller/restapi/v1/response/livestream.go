@@ -5,9 +5,10 @@ import "time"
 // LivestreamStreamer is the nested streamer sub-object within LivestreamResponse
 // (mirrors the VideoCreator / CommentUser convention).
 type LivestreamStreamer struct {
-	ID     string `json:"id"     example:"usr_12345"`
-	Name   string `json:"name"   example:"quanh_dep_trai"`
-	Avatar string `json:"avatar" example:"http://localhost:9000/raw-videos/avatars/user.jpg"`
+	ID             string `json:"id"     example:"usr_12345"`
+	Name           string `json:"name"   example:"quanh_dep_trai"`
+	Avatar         string `json:"avatar" example:"http://localhost:9000/raw-videos/avatars/user.jpg"`
+	FollowersCount int64  `json:"followers_count" example:"1420"`
 }
 
 type LivestreamResponse struct {
@@ -23,8 +24,11 @@ type LivestreamResponse struct {
 }
 
 type StreamKeyResponse struct {
-	ServerUrl string `json:"server_url" example:"rtmp://live.pipevid.com/live"`
-	StreamKey string `json:"stream_key" example:"sk_live_8h2k_92md_71px"`
+	ServerUrl    string     `json:"server_url" example:"rtmp://live.pipevid.com/live"`
+	StreamKey    string     `json:"stream_key" example:"sk_live_8h2k_92md_71px"`
+	IsLive       bool       `json:"is_live" example:"false"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	ViewersCount int64      `json:"viewers_count" example:"0"`
 }
 
 // ChatUser is the nested sender sub-object within ChatMessageResponse.

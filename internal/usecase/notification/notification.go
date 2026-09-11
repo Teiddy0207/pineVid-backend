@@ -47,6 +47,13 @@ func (u *UseCase) MarkAsRead(ctx context.Context, id, userID string) error {
 	return nil
 }
 
+func (u *UseCase) MarkAllAsRead(ctx context.Context, userID string) error {
+	if err := u.repo.MarkAllAsRead(ctx, userID); err != nil {
+		return fmt.Errorf("NotificationUseCase - MarkAllAsRead: %w", err)
+	}
+	return nil
+}
+
 func (u *UseCase) SubscribeNotifications(userID string) (<-chan response.NotificationResponse, func(), error) {
 	if u.notifHub == nil {
 		return nil, nil, errors.New("notification hub unavailable")
