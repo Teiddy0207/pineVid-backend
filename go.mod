@@ -15,7 +15,6 @@ tool (
 )
 
 require (
-	github.com/Conight/go-googletrans v0.3.0
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/ansrivas/fiberprometheus/v2 v2.17.0

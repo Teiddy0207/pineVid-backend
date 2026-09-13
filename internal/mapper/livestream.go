@@ -53,11 +53,13 @@ func ToLivestreamPageResponse(streams []entity.Livestream, totalItems, page, lim
 func ToChatMessageResponse(msg events.ChatMessage) response.ChatMessageResponse {
 	return response.ChatMessageResponse{
 		StreamID: msg.StreamID,
+		Type:     msg.Type,
 		User: response.ChatUser{
 			Name:   msg.Username,
 			Avatar: msg.Avatar,
 		},
 		Text:      msg.Text,
+		Value:     msg.Value,
 		CreatedAt: msg.CreatedAt,
 	}
 }

@@ -7,6 +7,7 @@ type NotificationType string
 const (
 	NotificationTypeLiveStart NotificationType = "live_start"
 	NotificationTypeNewVideo  NotificationType = "new_video"
+	NotificationTypeNewPost   NotificationType = "new_post"
 )
 
 type Notification struct {

@@ -27,6 +27,10 @@ func (m *MockVideoRepo) GetByID(ctx context.Context, id string) (entity.Video, e
 	return args.Get(0).(entity.Video), args.Error(1)
 }
 
+func (m *MockVideoRepo) GetByIDs(ctx context.Context, ids []string) ([]entity.Video, error) {
+	return nil, nil
+}
+
 func (m *MockVideoRepo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Video, int, error) {
 	args := m.Called(ctx, filter)
 	return args.Get(0).([]entity.Video), args.Int(1), args.Error(2)

@@ -64,7 +64,7 @@ func (m *MockLivestreamRepo) SumActiveViewers(ctx context.Context) (int64, error
 const testGrace = 50 * time.Millisecond
 
 func newLivestreamUseCase(repo *MockLivestreamRepo) *livestream.UseCase {
-	return livestream.New(repo, nil, nil, nil, nil, nil, nil, "", "", testGrace)
+	return livestream.New(repo, nil, nil, nil, nil, nil, nil, nil, "", "", testGrace)
 }
 
 func TestAuthenticateStreamKey_InvalidKey(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/events"
 	adminusecase "github.com/evrone/go-clean-template/internal/usecase/admin"
 	commentusecase "github.com/evrone/go-clean-template/internal/usecase/comment"
+	postusecase "github.com/evrone/go-clean-template/internal/usecase/post"
 	followusecase "github.com/evrone/go-clean-template/internal/usecase/follow"
 	historyusecase "github.com/evrone/go-clean-template/internal/usecase/history"
 	likeusecase "github.com/evrone/go-clean-template/internal/usecase/like"
@@ -29,6 +30,8 @@ import (
 	persistAdminStatsRepo "github.com/evrone/go-clean-template/internal/repo/persistent/adminstats"
 	persistCommentRepo "github.com/evrone/go-clean-template/internal/repo/persistent/comment"
 	persistCommentLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/commentlike"
+	persistPostRepo "github.com/evrone/go-clean-template/internal/repo/persistent/post"
+	persistPostLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/postlike"
 	persistFollowRepo "github.com/evrone/go-clean-template/internal/repo/persistent/follow"
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
@@ -38,8 +41,6 @@ import (
 	persistSubtitleRepo "github.com/evrone/go-clean-template/internal/repo/persistent/subtitle"
 	persistVocabRepo "github.com/evrone/go-clean-template/internal/repo/persistent/vocabulary"
 	persistWorkerRepo "github.com/evrone/go-clean-template/internal/repo/persistent/worker"
-	persistTaskRepo "github.com/evrone/go-clean-template/internal/repo/persistent/task"
-	persistTranslationRepo "github.com/evrone/go-clean-template/internal/repo/persistent/translation"
 	persistUserRepo "github.com/evrone/go-clean-template/internal/repo/persistent/user"
 	persistUserPrefRepo "github.com/evrone/go-clean-template/internal/repo/persistent/userpreference"
 	userprefusecase "github.com/evrone/go-clean-template/internal/usecase/userpreference"
@@ -49,10 +50,8 @@ import (
 	persistViewRepo "github.com/evrone/go-clean-template/internal/repo/persistent/view"
 	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
 	redispkg "github.com/evrone/go-clean-template/pkg/redis"
-	"github.com/evrone/go-clean-template/internal/repo/webapi"
+	pkgsrs "github.com/evrone/go-clean-template/pkg/srs"
 	"github.com/evrone/go-clean-template/internal/usecase"
-	"github.com/evrone/go-clean-template/internal/usecase/task"
-	"github.com/evrone/go-clean-template/internal/usecase/translation"
 	"github.com/evrone/go-clean-template/internal/usecase/user"
 	"github.com/evrone/go-clean-template/pkg/grpcserver"
 	"github.com/evrone/go-clean-template/pkg/httpserver"
@@ -67,14 +66,13 @@ import (
 )
 
 type useCases struct {
-	translation    usecase.Translation
 	user           usecase.User
-	task           usecase.Task
 	video          usecase.Video
 	livestream     usecase.Livestream
 	admin          usecase.Admin
 	like           usecase.Like
 	comment        usecase.Comment
+	post           usecase.Post
 	recommendation usecase.Recommendation
 	history        usecase.History
 	follow         usecase.Follow
@@ -92,13 +90,13 @@ type servers struct {
 }
 
 func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Manager, chatHub *events.ChatHub, notifHub *events.NotificationHub, l logger.Interface) useCases {
-	translationRepo := persistTranslationRepo.New(pg)
-	taskRepo := persistTaskRepo.New(pg)
 	userRepo := persistUserRepo.New(pg)
 	videoRepo := persistVideoRepo.New(pg)
 	livestreamRepo := persistLivestreamRepo.New(pg)
 	commentRepo := persistCommentRepo.New(pg)
 	commentLikeRepo := persistCommentLikeRepo.New(pg)
+	postRepo := persistPostRepo.New(pg)
+	postLikeRepo := persistPostLikeRepo.New(pg)
 	recRepo := persistRecRepo.New(pg)
 	historyRepo := persistHistoryRepo.New(pg)
 	followRepo := persistFollowRepo.New(pg)
@@ -123,12 +121,15 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	if err != nil {
 		l.Error(fmt.Errorf("app - initUseCases - pkgminio.New: %w", err))
 	}
-	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, natsPub, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
+	srsClient := pkgsrs.New(cfg.SRS.APIURL)
+	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, natsPub, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
+	livestreamUc.StartReconciliationLoop(context.Background(), cfg.SRS.ReconcileInterval)
 	workerRepo := persistWorkerRepo.New(pg)
 	adminStatsRepo := persistAdminStatsRepo.New(pg)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo, userRepo, workerRepo, adminStatsRepo)
-	likeUc := likeusecase.New(likeRepo, natsPub)
+	likeUc := likeusecase.New(likeRepo, natsPub, livestreamUc)
 	commentUc := commentusecase.New(commentRepo, commentLikeRepo, natsPub)
+	postUc := postusecase.New(postRepo, postLikeRepo, notifUc)
 	recUc := recusecase.New(recRepo, videoRepo, userPrefRepo)
 	recUc.StartBackgroundTraining(context.Background(), 5*time.Minute)
 	historyUc := historyusecase.New(historyRepo)
@@ -140,13 +141,12 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 
 	return useCases{
 		user:           user.New(userRepo, jwtManager),
-		task:           task.New(taskRepo),
-		translation:    translation.New(translationRepo, webapi.New()),
 		video:          videoUc,
 		livestream:     livestreamUc,
 		admin:          adminUc,
 		like:           likeUc,
 		comment:        commentUc,
+		post:           postUc,
 		recommendation: recUc,
 		history:        historyUc,
 		follow:         followUc,
@@ -163,7 +163,7 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 	var natsServer *natsRPCServer.Server
 	var err error
 	if cfg.NATS.URL != "" {
-		natsRouter := natsrpc.NewRouter(uc.translation, uc.user, uc.task, jwtManager, l)
+		natsRouter := natsrpc.NewRouter(uc.user, jwtManager, l)
 		natsServer, err = natsRPCServer.New(cfg.NATS.URL, cfg.NATS.ServerExchange, natsRouter, l)
 		if err != nil {
 			l.Error(fmt.Errorf("app - Run - natsServer: %w", err))
@@ -179,12 +179,19 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 			pbgrpc.StatsHandler(otelgrpc.NewServerHandler()),
 		),
 	)
-	grpc.NewRouter(grpcServer.App, uc.translation, uc.user, uc.task, l)
+	grpc.NewRouter(grpcServer.App, uc.user, l)
 
 	// HTTP Server
 	videoEventHub := events.NewHub()
-	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
-	restapi.NewRouter(httpServer.App, cfg, uc.translation, uc.user, uc.task, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.recommendation, uc.history, uc.follow, uc.notification, uc.vocabulary, uc.subtitle, uc.userPreference, uc.savedVideo, videoEventHub, chatHub, jwtManager, l)
+	// WriteTimeout is unlimited: fasthttp applies it as a single deadline for
+	// the connection's entire response, which fasthttp only surfaces as an
+	// error on the *next* write attempted after it elapses (it doesn't
+	// proactively close idle connections) — so with the previous 5s default,
+	// every long-lived SSE stream (chat, hearts, notifications, transcode
+	// events) silently stopped delivering anything sent more than ~5s after
+	// the client connected, even though the connection looked "open".
+	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode), httpserver.WriteTimeout(0))
+	restapi.NewRouter(httpServer.App, cfg, uc.user, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.post, uc.recommendation, uc.history, uc.follow, uc.notification, uc.vocabulary, uc.subtitle, uc.userPreference, uc.savedVideo, videoEventHub, chatHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,

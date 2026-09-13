@@ -51,6 +51,7 @@ type Video struct {
 	HLSUrl       string          `json:"hls_url"`
 	ThumbnailUrl string          `json:"thumbnail_url"`
 	Duration     string          `json:"duration"`
+	IsReel       bool            `json:"is_reel"`
 	Views        int64           `json:"views"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`

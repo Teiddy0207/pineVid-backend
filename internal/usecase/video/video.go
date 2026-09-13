@@ -125,6 +125,150 @@ func (u *UseCase) GetByID(ctx context.Context, id, userID string) (response.Vide
 	return resDTO, nil
 }
 
+// trendingScanLimit is how many top-ranked IDs GetTrending pulls from Redis
+// before paginating in Go — generous enough to cover several pages without
+// re-querying Redis per page.
+const trendingScanLimit = 100
+
+// GetTrending ranks public/complete videos by view count over a recent
+// window ("24h" = today's UTC bucket, "7d" = the last 7 days) instead of
+// the lifetime total, so a genuinely fresh burst of views can surface a
+// video ahead of an old one that's merely accumulated more views over time.
+// Falls back to ListPublicVideos (sorted by recency) when Redis has no
+// trending data yet — e.g. a fresh deployment before any view has landed.
+func (u *UseCase) GetTrending(ctx context.Context, window, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	days := 1
+	if window == "7d" {
+		days = 7
+	}
+
+	var rankedIDs []string
+	if u.viewRepo != nil {
+		rankedIDs, _ = u.viewRepo.GetTrendingVideoIDs(ctx, days, trendingScanLimit)
+	}
+
+	if len(rankedIDs) == 0 {
+		return u.ListPublicVideos(ctx, userID, "", "", page, limit)
+	}
+
+	videos, err := u.repo.GetByIDs(ctx, rankedIDs)
+	if err != nil {
+		return response.PageResponse[response.VideoResponse]{}, fmt.Errorf("VideoUseCase - GetTrending - GetByIDs: %w", err)
+	}
+
+	byID := make(map[string]entity.Video, len(videos))
+	for _, v := range videos {
+		byID[v.ID] = v
+	}
+
+	ranked := make([]entity.Video, 0, len(videos))
+	for _, id := range rankedIDs {
+		if v, ok := byID[id]; ok {
+			ranked = append(ranked, v)
+		}
+	}
+
+	total := len(ranked)
+	offset := (page - 1) * limit
+	if offset >= total {
+		return mapper.ToVideoPageResponse(nil, total, page, limit), nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+
+	return mapper.ToVideoPageResponse(ranked[offset:end], total, page, limit), nil
+}
+
+// GetReelsFeed ranks short-form ("reel") videos by the same recent-window
+// view-count mechanism as GetTrending, but restricted to entity.Video.IsReel.
+// Falls back to the newest reels by recency (a plain SQL-paginated query,
+// not limited by trendingScanLimit) whenever Redis has no ranked IDs yet, or
+// when none of the currently-trending videos happen to be reels.
+func (u *UseCase) GetReelsFeed(ctx context.Context, userID, window string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	days := 1
+	if window == "7d" {
+		days = 7
+	}
+
+	var rankedIDs []string
+	if u.viewRepo != nil {
+		rankedIDs, _ = u.viewRepo.GetTrendingVideoIDs(ctx, days, trendingScanLimit)
+	}
+
+	reelIDsInRankOrder := make([]string, 0, len(rankedIDs))
+	if len(rankedIDs) > 0 {
+		videos, err := u.repo.GetByIDs(ctx, rankedIDs)
+		if err == nil {
+			byID := make(map[string]entity.Video, len(videos))
+			for _, v := range videos {
+				if v.IsReel {
+					byID[v.ID] = v
+				}
+			}
+			for _, id := range rankedIDs {
+				if _, ok := byID[id]; ok {
+					reelIDsInRankOrder = append(reelIDsInRankOrder, id)
+				}
+			}
+		}
+	}
+
+	if len(reelIDsInRankOrder) == 0 {
+		return u.listReelsByRecency(ctx, page, limit)
+	}
+
+	videos, err := u.repo.GetByIDs(ctx, reelIDsInRankOrder)
+	if err != nil {
+		return response.PageResponse[response.VideoResponse]{}, fmt.Errorf("VideoUseCase - GetReelsFeed - GetByIDs: %w", err)
+	}
+
+	byID := make(map[string]entity.Video, len(videos))
+	for _, v := range videos {
+		byID[v.ID] = v
+	}
+
+	ranked := make([]entity.Video, 0, len(videos))
+	for _, id := range reelIDsInRankOrder {
+		if v, ok := byID[id]; ok {
+			ranked = append(ranked, v)
+		}
+	}
+
+	total := len(ranked)
+	offset := (page - 1) * limit
+	if offset >= total {
+		return mapper.ToVideoPageResponse(nil, total, page, limit), nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+
+	return mapper.ToVideoPageResponse(ranked[offset:end], total, page, limit), nil
+}
+
+func (u *UseCase) listReelsByRecency(ctx context.Context, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	offset := (page - 1) * limit
+	status := entity.VideoStatusComplete
+	visibility := entity.VideoVisibilityPublic
+	isReel := true
+
+	videos, total, err := u.repo.List(ctx, repo.VideoFilter{
+		Status:     &status,
+		Visibility: &visibility,
+		IsReel:     &isReel,
+		Limit:      uint64(limit),
+		Offset:     uint64(offset),
+	})
+	if err != nil {
+		return response.PageResponse[response.VideoResponse]{}, fmt.Errorf("VideoUseCase - listReelsByRecency - List: %w", err)
+	}
+
+	return mapper.ToVideoPageResponse(videos, total, page, limit), nil
+}
+
 func (u *UseCase) ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
 	offset := (page - 1) * limit
 	status := entity.VideoStatusComplete

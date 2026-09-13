@@ -9,14 +9,13 @@ import (
 
 // V1 -.
 type V1 struct {
-	t       usecase.Translation
 	u       usecase.User
-	tk      usecase.Task
 	vd      usecase.Video
 	ls      usecase.Livestream
 	ad      usecase.Admin
 	lk      usecase.Like
 	cm      usecase.Comment
+	ps      usecase.Post
 	rc      usecase.Recommendation
 	hs      usecase.History
 	fw      usecase.Follow

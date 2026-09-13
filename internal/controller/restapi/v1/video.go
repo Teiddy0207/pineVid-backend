@@ -58,6 +58,53 @@ func (r *V1) listPublicVideos(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(pageDTO)
 }
 
+// @Summary      List trending videos
+// @Description  Get public videos ranked by view count over a recent window ("24h" or "7d"), instead of lifetime total views
+// @Tags         Videos
+// @Accept       json
+// @Produce      json
+// @Param        window query string false "Ranking window: 24h or 7d" default(24h)
+// @Param        page query int false "Page number" default(1)
+// @Param        limit query int false "Page limit" default(10)
+// @Success      200 {object} response.VideoResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/videos/trending [get]
+func (r *V1) listTrendingVideos(ctx *fiber.Ctx) error {
+	window := ctx.Query("window", "24h")
+	if window != "7d" {
+		window = "24h"
+	}
+	userID := getUserID(ctx)
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 10)
+
+	pageDTO, err := r.vd.GetTrending(ctx.UserContext(), window, userID, page, limit)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - listTrendingVideos")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to list trending videos")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(pageDTO)
+}
+
+func (r *V1) listReels(ctx *fiber.Ctx) error {
+	window := ctx.Query("window", "7d")
+	if window != "24h" {
+		window = "7d"
+	}
+	userID := getUserID(ctx)
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 10)
+
+	pageDTO, err := r.vd.GetReelsFeed(ctx.UserContext(), userID, window, page, limit)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - listReels")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to list reels")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(pageDTO)
+}
+
 // @Summary      Get video by ID
 // @Description  Get video details by ID
 // @Tags         Videos

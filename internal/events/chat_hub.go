@@ -2,12 +2,21 @@ package events
 
 import "sync"
 
-// ChatMessage represents a single chat message in a live stream room
+// ChatMessage represents a single event broadcast into a live stream room.
+// Type discriminates what kind of event this is:
+//   - "chat" (default, zero value): a regular chat message — Text is set.
+//   - "heart": someone sent a heart reaction — Value carries the room's new
+//     running total, straight from the real HeartStream API call.
+//
+// Kept as one struct (rather than a per-type union) so the existing
+// single-channel ChatHub plumbing doesn't need to change shape.
 type ChatMessage struct {
 	StreamID  string `json:"stream_id"`
-	Username  string `json:"username"`
-	Avatar    string `json:"avatar"`
-	Text      string `json:"text"`
+	Type      string `json:"type,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Avatar    string `json:"avatar,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Value     int64  `json:"value,omitempty"`
 	CreatedAt string `json:"created_at"`
 }
 

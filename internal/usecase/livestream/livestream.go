@@ -18,6 +18,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/usecase"
 	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
 	"github.com/evrone/go-clean-template/pkg/nats"
+	"github.com/evrone/go-clean-template/pkg/srs"
 	"github.com/google/uuid"
 )
 
@@ -39,6 +40,7 @@ type UseCase struct {
 	notifUc       usecase.Notification
 	minioClient   *pkgminio.Client
 	natsPublisher *nats.Publisher
+	srsClient     *srs.Client
 	rawBucket     string
 	dvrLocalDir   string
 	graceDuration time.Duration
@@ -49,12 +51,12 @@ type UseCase struct {
 
 func New(
 	r repo.LivestreamRepo, vr repo.VideoRepo, followRepo repo.FollowRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
-	minioClient *pkgminio.Client, natsPublisher *nats.Publisher, rawBucket, dvrLocalDir string,
+	minioClient *pkgminio.Client, natsPublisher *nats.Publisher, srsClient *srs.Client, rawBucket, dvrLocalDir string,
 	graceDuration time.Duration,
 ) *UseCase {
 	return &UseCase{
 		repo: r, videoRepo: vr, followRepo: followRepo, chatHub: chatHub, notifUc: notifUc,
-		minioClient: minioClient, natsPublisher: natsPublisher,
+		minioClient: minioClient, natsPublisher: natsPublisher, srsClient: srsClient,
 		rawBucket: rawBucket, dvrLocalDir: dvrLocalDir,
 		graceDuration: graceDuration,
 		pending:       make(map[string]*pendingEnd),
@@ -332,32 +334,83 @@ func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPat
 	return nil
 }
 
+// reconcileScanLimit caps how many "is_live=true" rows a single reconcile
+// pass inspects. Generous for any realistic concurrent-stream count while
+// keeping the query bounded.
+const reconcileScanLimit = 1000
+
+// ReconcileLiveStreams is the self-healing counterpart to the on_unpublish
+// webhook: it asks SRS directly which stream keys are actually receiving
+// RTMP data right now, and flips any DB row that's stuck at is_live=true but
+// isn't in that list back to offline. This covers the case the webhook can't
+// — SRS crashing, a container restart, a network partition between SRS and
+// the backend — where no on_unpublish call ever arrives and a channel would
+// otherwise "look live" forever with nothing actually streaming.
+//
+// Streams currently inside the reconnection grace window (see
+// UnpublishStream) are left alone here: that path already owns their
+// eventual finalize, and reconciling them early would race it.
+func (u *UseCase) ReconcileLiveStreams(ctx context.Context) error {
+	if u.srsClient == nil {
+		return nil
+	}
+
+	activeKeys, err := u.srsClient.ActiveStreamKeys(ctx)
+	if err != nil {
+		return fmt.Errorf("LivestreamUseCase - ReconcileLiveStreams - ActiveStreamKeys: %w", err)
+	}
+
+	liveRows, _, err := u.repo.ListActive(ctx, "", reconcileScanLimit, 0)
+	if err != nil {
+		return fmt.Errorf("LivestreamUseCase - ReconcileLiveStreams - ListActive: %w", err)
+	}
+
+	now := time.Now().UTC()
+	for _, ls := range liveRows {
+		if activeKeys[ls.StreamKey] {
+			continue
+		}
+
+		u.mu.Lock()
+		_, inGracePeriod := u.pending[ls.StreamKey]
+		u.mu.Unlock()
+		if inGracePeriod {
+			continue
+		}
+
+		ls.IsLive = false
+		ls.EndedAt = &now
+		ls.UpdatedAt = now
+		_ = u.repo.Update(ctx, &ls)
+	}
+
+	return nil
+}
+
+// StartReconciliationLoop runs ReconcileLiveStreams immediately, then on a
+// fixed interval in the background for as long as ctx is alive. No HTTP
+// request ever waits on this — it only ever corrects the DB out-of-band.
+func (u *UseCase) StartReconciliationLoop(ctx context.Context, interval time.Duration) {
+	_ = u.ReconcileLiveStreams(ctx)
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = u.ReconcileLiveStreams(ctx)
+			}
+		}
+	}()
+}
+
 func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error) {
 	ls, err := u.repo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, entity.ErrLivestreamNotFound) {
-			now := time.Now().UTC()
-			mockLs := entity.Livestream{
-				ID:           id,
-				UserID:       "usr_demo",
-				Title:        "Exploring the edge of the universe",
-				Category:     "Science",
-				IsLive:       true,
-				HLSUrl:       "http://localhost:8082/live/sk_live_8h2k_92md_71px.m3u8",
-				ViewersCount: 0,
-				StartedAt:    &now,
-			}
-			if id == "2" {
-				mockLs.Title = "Ranked grind · road to Radiant"
-				mockLs.Category = "Gaming"
-				mockLs.ViewersCount = 0
-			} else if id == "3" {
-				mockLs.Title = "Late night studio session"
-				mockLs.Category = "Music"
-				mockLs.ViewersCount = 0
-			}
-			return u.withFollowersCount(ctx, mapper.ToLivestreamResponse(mockLs)), nil
-		}
 		return response.LivestreamResponse{}, err
 	}
 	return u.withFollowersCount(ctx, mapper.ToLivestreamResponse(ls)), nil
@@ -408,6 +461,7 @@ func (u *UseCase) SendChatMessage(ctx context.Context, streamID string, req requ
 
 	msg := events.ChatMessage{
 		StreamID:  streamID,
+		Type:      "chat",
 		Username:  req.Username,
 		Avatar:    req.Avatar,
 		Text:      req.Text,
@@ -419,6 +473,23 @@ func (u *UseCase) SendChatMessage(ctx context.Context, streamID string, req requ
 	}
 
 	return mapper.ToChatMessageResponse(msg), nil
+}
+
+// BroadcastHeart pushes a real-time "someone hearted this stream" event to
+// every viewer currently subscribed to the room's SSE channel, carrying the
+// room's authoritative new total (as returned by the real HeartStream API
+// call) — not a locally-guessed count. Called by the like usecase right
+// after it persists the increment.
+func (u *UseCase) BroadcastHeart(streamID string, totalHearts int64) {
+	if u.chatHub == nil {
+		return
+	}
+	u.chatHub.Broadcast(streamID, events.ChatMessage{
+		StreamID:  streamID,
+		Type:      "heart",
+		Value:     totalHearts,
+		CreatedAt: time.Now().Format("15:04:05"),
+	})
 }
 
 // SubscribeChat maps the raw internal ChatHub event stream to the public

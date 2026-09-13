@@ -9,10 +9,8 @@ import (
 
 // V1 -.
 type V1 struct {
-	t  usecase.Translation
-	u  usecase.User
-	tk usecase.Task
-	j  *jwt.Manager
-	l  logger.Interface
-	v  *validator.Validate
+	u usecase.User
+	j *jwt.Manager
+	l logger.Interface
+	v *validator.Validate
 }

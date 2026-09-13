@@ -12,12 +12,6 @@ import (
 //go:generate mockgen -source=contracts.go -destination=./mocks_usecase_test.go -package=usecase_test
 
 type (
-	// Translation -.
-	Translation interface {
-		Translate(ctx context.Context, userID string, t entity.Translation) (entity.Translation, error)
-		History(ctx context.Context, userID string) (entity.TranslationHistory, error)
-	}
-
 	// User -.
 	User interface {
 		Register(ctx context.Context, username, email, password string) (entity.User, error)
@@ -27,22 +21,14 @@ type (
 		UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error)
 	}
 
-	// Task -.
-	Task interface {
-		Create(ctx context.Context, userID, title, description string) (entity.Task, error)
-		Get(ctx context.Context, userID, taskID string) (entity.Task, error)
-		List(ctx context.Context, userID string, status *entity.TaskStatus, limit, offset int) ([]entity.Task, int, error)
-		Transition(ctx context.Context, userID, taskID string, newStatus entity.TaskStatus) (entity.Task, error)
-		Update(ctx context.Context, userID, taskID, title, description string) (entity.Task, error)
-		Delete(ctx context.Context, userID, taskID string) error
-	}
-
 	// Video -.
 	Video interface {
 		CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error)
 		ConfirmUpload(ctx context.Context, userID string, req request.ConfirmUpload) (response.VideoResponse, error)
 		GetByID(ctx context.Context, id, userID string) (response.VideoResponse, error)
 		ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error)
+		GetTrending(ctx context.Context, window, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
+		GetReelsFeed(ctx context.Context, userID, window string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		ListStudioVideos(ctx context.Context, userID, query string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		PublishVideo(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		UpdateVideo(ctx context.Context, userID, videoID string, req request.UpdateVideo) (response.VideoResponse, error)
@@ -51,6 +37,14 @@ type (
 		RetryTranscode(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
 		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error
 		RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error)
+	}
+
+	// Post -.
+	Post interface {
+		CreatePost(ctx context.Context, userID, userName, userAvatar string, req request.CreatePostRequest) (response.PostResponse, error)
+		ListPostsByUser(ctx context.Context, userID, viewerID string, page, limit int) (response.PageResponse[response.PostResponse], error)
+		TogglePostLike(ctx context.Context, postID, userID string) (response.PostLikeResponse, error)
+		DeletePost(ctx context.Context, userID, postID string) error
 	}
 
 	// Livestream -.
@@ -65,6 +59,8 @@ type (
 		UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error)
 		SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error)
 		SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error)
+		ReconcileLiveStreams(ctx context.Context) error
+		BroadcastHeart(streamID string, totalHearts int64)
 	}
 
 	// Subtitle -.

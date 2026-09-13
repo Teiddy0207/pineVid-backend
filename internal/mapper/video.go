@@ -24,6 +24,7 @@ func ToVideoEntity(userID string, req request.CreateVideoUpload, id, s3Key strin
 		RawS3Key:     s3Key,
 		ThumbnailUrl: req.ThumbnailURL,
 		Duration:     req.Duration,
+		IsReel:       req.IsReel,
 	}
 }
 
@@ -71,6 +72,7 @@ func ToVideoResponse(v entity.Video) response.VideoResponse {
 		HLSUrl:       v.HLSUrl,
 		ThumbnailUrl: v.ThumbnailUrl,
 		Duration:     v.Duration,
+		IsReel:       v.IsReel,
 		Views:        v.Views,
 		CreatedAt:    v.CreatedAt,
 		UpdatedAt:    v.UpdatedAt,

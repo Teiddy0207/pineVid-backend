@@ -8,6 +8,7 @@ type CreateVideoUpload struct {
 	Visibility   string `json:"visibility" validate:"omitempty,oneof=public private unlisted"`
 	ThumbnailURL string `json:"thumbnail_url"`
 	Duration     string `json:"duration"`
+	IsReel       bool   `json:"is_reel"`
 }
 
 type UpdateVideo struct {

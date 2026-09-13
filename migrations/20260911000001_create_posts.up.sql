@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS posts (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    user_name VARCHAR(128) NOT NULL DEFAULT 'Viewer',
+    user_avatar VARCHAR(512) NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    image_url VARCHAR(512) NOT NULL DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);

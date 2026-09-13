@@ -3,9 +3,12 @@ package v1
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
+	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -49,6 +52,9 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 
 	resDTO, err := r.ls.GetStreamByID(ctx.UserContext(), id)
 	if err != nil {
+		if errors.Is(err, entity.ErrLivestreamNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "stream not found")
+		}
 		r.l.Error(err, "restapi - v1 - getStream")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to get stream")
 	}
@@ -94,7 +100,13 @@ func (r *V1) sendChatMessage(ctx *fiber.Ctx) error {
 // @Param        id path string true "Livestream ID"
 // @Router       /v1/events/chat/{id} [get]
 func (r *V1) sseChatEvents(ctx *fiber.Ctx) error {
-	streamID := ctx.Params("id")
+	// fasthttp backs ctx.Params() with a buffer it reuses for later requests
+	// once this handler returns — which SSE handlers do immediately, since
+	// the actual work happens later in the SetBodyStreamWriter goroutine.
+	// Without an explicit copy here, the string used as the ChatHub room key
+	// gets silently corrupted the moment fasthttp recycles that buffer for
+	// the next request, breaking the subscription with no visible error.
+	streamID := string([]byte(ctx.Params("id")))
 
 	ctx.Set("Content-Type", "text/event-stream")
 	ctx.Set("Cache-Control", "no-cache")

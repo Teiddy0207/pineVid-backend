@@ -85,7 +85,12 @@ func (r *V1) markAllNotificationsRead(ctx *fiber.Ctx) error {
 func (r *V1) sseNotificationEvents(ctx *fiber.Ctx) error {
 	userID := getUserID(ctx)
 	if userID == "" {
-		userID = ctx.Query("user_id") // Fallback for query param EventSource
+		// ctx.Query() is backed by a fasthttp buffer that gets reused once
+		// this handler returns (which SSE handlers do immediately) — must
+		// copy it before using it as a long-lived subscription key, or it
+		// silently corrupts once fasthttp recycles the buffer for the next
+		// request (see sseChatEvents for the same fix and full explanation).
+		userID = string([]byte(ctx.Query("user_id"))) // Fallback for query param EventSource
 	}
 
 	ctx.Set("Content-Type", "text/event-stream")

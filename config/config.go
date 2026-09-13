@@ -25,6 +25,7 @@ type (
 		Tracing tracing
 		Minio   minio
 		DVR     dvr
+		SRS     srs
 	}
 
 	// App -.
@@ -110,6 +111,14 @@ type (
 	// (bind-mounted into the SRS container at the same relative dvr_path).
 	dvr struct {
 		LocalDir string `env:"DVR_LOCAL_DIR" envDefault:"./dvr-data"`
+	}
+
+	// SRS -. SRS's own read-only http_api (not the http_hooks callback URLs,
+	// which SRS calls into us on) — polled periodically to reconcile the
+	// `is_live` DB flag in case an on_unpublish webhook never arrives.
+	srs struct {
+		APIURL            string        `env:"SRS_API_URL" envDefault:"http://localhost:1985"`
+		ReconcileInterval time.Duration `env:"SRS_RECONCILE_INTERVAL" envDefault:"15s"`
 	}
 )
 

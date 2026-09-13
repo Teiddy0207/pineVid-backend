@@ -21,6 +21,7 @@ type VideoResponse struct {
 	HLSUrl       string       `json:"hls_url"       example:"https://s3.pipevid.com/hls/space/master.m3u8"`
 	ThumbnailUrl string       `json:"thumbnail_url" example:"https://s3.pipevid.com/thumbnails/space.jpg"`
 	Duration     string       `json:"duration"      example:"18:42"`
+	IsReel       bool         `json:"is_reel"`
 	Views        int64        `json:"views"         example:"24812"`
 	LikesCount   int64        `json:"likes_count"   example:"312"`
 	IsLiked      bool         `json:"is_liked"`

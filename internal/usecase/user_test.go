@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var errInternalServErr = errors.New("internal server error")
 
 func newUserUseCase(t *testing.T) (usecase.User, *MockUserRepo) {
 	t.Helper()
