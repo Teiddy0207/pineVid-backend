@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-
 const _tracerName = "github.com/evrone/go-clean-template/internal/usecase/user"
 
 // tracedUseCase wraps a User usecase with OpenTelemetry spans, closing the
@@ -48,7 +47,7 @@ func (u *tracedUseCase) Register(ctx context.Context, username, email, password 
 	return result, err
 }
 
-func (u *tracedUseCase) Login(ctx context.Context, email, password string) (string, error) {
+func (u *tracedUseCase) Login(ctx context.Context, email, password string) (response.Token, error) {
 	ctx, span := startSpan(ctx, "UserUseCase.Login", attribute.String("user.email", email))
 
 	result, err := u.next.Login(ctx, email, password)
@@ -84,4 +83,30 @@ func (u *tracedUseCase) RefreshToken(ctx context.Context, refreshToken string) (
 	return result, err
 }
 
+func (u *tracedUseCase) Logout(ctx context.Context, refreshToken string) error {
+	ctx, span := startSpan(ctx, "UserUseCase.Logout")
 
+	err := u.next.Logout(ctx, refreshToken)
+	endSpan(span, err)
+
+	return err
+}
+
+func (u *tracedUseCase) IsBanned(ctx context.Context, userID string) (bool, error) {
+	// Deliberately untraced: called by the auth middleware on every
+	// authenticated request and served from an in-memory cache.
+	return u.next.IsBanned(ctx, userID)
+}
+
+func (u *tracedUseCase) InvalidateBanCache(userID string) {
+	u.next.InvalidateBanCache(userID)
+}
+
+func (u *tracedUseCase) RevokeSessions(ctx context.Context, userID string) error {
+	ctx, span := startSpan(ctx, "UserUseCase.RevokeSessions", attribute.String("user.id", userID))
+
+	err := u.next.RevokeSessions(ctx, userID)
+	endSpan(span, err)
+
+	return err
+}

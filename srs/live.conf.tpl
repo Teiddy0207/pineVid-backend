@@ -1,4 +1,5 @@
-# PipeVid SRS config — based on the image's default conf/http.hls.conf, with
+# PipeVid SRS config TEMPLATE — rendered to conf/live.conf by the srs service
+# entrypoint in docker-compose.yml. Based on the image's default conf/http.hls.conf, with
 # http_hooks added so SRS calls back to the Go backend to authenticate stream
 # keys (on_publish) and mark a stream offline when the encoder disconnects
 # (on_unpublish). See BUSINESS_REQUIREMENTS.md §3.3 (RTMP Auth webhook).
@@ -22,11 +23,15 @@ http_api {
     listen          1985;
 }
 vhost __defaultVhost__ {
+    # The hook base URL and secret placeholders below are substituted from the
+    # container env at startup (see the srs service in docker-compose.yml).
+    # The backend rejects hook calls without the matching ?secret= (SRS can't
+    # send custom headers), so nobody else can fake a publish/unpublish.
     http_hooks {
         enabled         on;
-        on_publish      http://host.docker.internal:8080/v1/live/auth;
-        on_unpublish    http://host.docker.internal:8080/v1/live/unpublish;
-        on_dvr          http://host.docker.internal:8080/v1/live/dvr;
+        on_publish      __SRS_HOOK_BASE_URL__/v1/live/auth?secret=__INTERNAL_WEBHOOK_SECRET__;
+        on_unpublish    __SRS_HOOK_BASE_URL__/v1/live/unpublish?secret=__INTERNAL_WEBHOOK_SECRET__;
+        on_dvr          __SRS_HOOK_BASE_URL__/v1/live/dvr?secret=__INTERNAL_WEBHOOK_SECRET__;
     }
     hls {
         enabled         on;

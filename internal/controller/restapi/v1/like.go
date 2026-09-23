@@ -24,6 +24,10 @@ func (r *V1) toggleLikeVideo(ctx *fiber.Ctx) error {
 
 	userID := getUserID(ctx)
 
+	if ok, err := r.videoViewable(ctx, videoID); !ok {
+		return err
+	}
+
 	resDTO, err := r.lk.ToggleLikeVideo(ctx.UserContext(), userID, videoID)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - toggleLikeVideo")

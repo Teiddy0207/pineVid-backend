@@ -37,18 +37,20 @@ func (r *V1) createComment(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, err.Error())
 	}
 
-	userID := getUserID(ctx)
-	userName := ctx.Get("X-User-Name")
-	if userName == "" {
-		if len(userID) >= 4 {
-			userName = "Viewer #" + userID[len(userID)-4:]
-		} else {
-			userName = "Viewer #" + userID
-		}
+	if ok, err := r.videoViewable(ctx, videoID); !ok {
+		return err
 	}
-	userAvatar := ctx.Get("X-User-Avatar")
 
-	resDTO, err := r.cm.CreateComment(ctx.UserContext(), videoID, userID, userName, userAvatar, body)
+	// The author's name/avatar are resolved server-side from the account —
+	// never from client-supplied headers, which anyone could forge.
+	userID := getUserID(ctx)
+	user, err := r.u.GetUser(ctx.UserContext(), userID)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - createComment - GetUser")
+		return errorResponse(ctx, http.StatusUnauthorized, "unauthorized")
+	}
+
+	resDTO, err := r.cm.CreateComment(ctx.UserContext(), videoID, userID, user.Username, user.Avatar, body)
 	if err != nil {
 		if errors.Is(err, entity.ErrInvalidParentID) {
 			return errorResponse(ctx, http.StatusBadRequest, err.Error())
@@ -85,6 +87,10 @@ func (r *V1) listVideoComments(ctx *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(ctx.Query("limit", "10"))
 	if limit < 1 || limit > 50 {
 		limit = 10
+	}
+
+	if ok, err := r.videoViewable(ctx, videoID); !ok {
+		return err
 	}
 
 	userID := getUserID(ctx)

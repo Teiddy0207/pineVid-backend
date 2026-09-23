@@ -2,6 +2,7 @@ package livestream_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/usecase/livestream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockLivestreamRepo is a hand-rolled testify mock implementing
@@ -81,6 +83,73 @@ func TestAuthenticateStreamKey_InvalidKey(t *testing.T) {
 	assert.ErrorIs(t, err, entity.ErrInvalidStreamKey)
 }
 
+func TestAuthenticateStreamKey_BannedStreamRejected(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockLivestreamRepo)
+	uc := newLivestreamUseCase(repo)
+
+	repo.On("GetByStreamKey", mock.Anything, "sk-banned").Return(entity.Livestream{ID: "ls-b", StreamKey: "sk-banned", IsBanned: true}, nil)
+
+	ok, err := uc.AuthenticateStreamKey(context.Background(), request.StreamKeyAuth{StreamKey: "sk-banned"})
+	assert.False(t, ok)
+	assert.ErrorIs(t, err, entity.ErrStreamBanned)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+}
+
+func TestAuthenticateStreamKey_BannedOwnerRejected(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockLivestreamRepo)
+	uc := newLivestreamUseCase(repo)
+
+	repo.On("GetByStreamKey", mock.Anything, "sk-owner-banned").Return(entity.Livestream{ID: "ls-o", StreamKey: "sk-owner-banned", OwnerBanned: true}, nil)
+
+	ok, err := uc.AuthenticateStreamKey(context.Background(), request.StreamKeyAuth{StreamKey: "sk-owner-banned"})
+	assert.False(t, ok)
+	assert.ErrorIs(t, err, entity.ErrStreamBanned)
+}
+
+// A ban issued while the streamer is in the reconnect grace window must also
+// block the reconnect (the grace shortcut used to skip every DB check).
+func TestAuthenticateStreamKey_BanDuringGraceBlocksReconnect(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockLivestreamRepo)
+	uc := newLivestreamUseCase(repo)
+
+	live := entity.Livestream{ID: "ls-g", StreamKey: "sk-g", UserID: "user-g", IsLive: true}
+	repo.On("GetByStreamKey", mock.Anything, "sk-g").Return(live, nil).Once()
+	require.NoError(t, uc.UnpublishStream(context.Background(), "sk-g"))
+
+	banned := live
+	banned.IsBanned = true
+	repo.On("GetByStreamKey", mock.Anything, "sk-g").Return(banned, nil)
+	repo.On("Update", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	ok, err := uc.AuthenticateStreamKey(context.Background(), request.StreamKeyAuth{StreamKey: "sk-g"})
+	assert.False(t, ok)
+	assert.ErrorIs(t, err, entity.ErrStreamBanned)
+}
+
+func TestSendChatMessage_Validation(t *testing.T) {
+	t.Parallel()
+
+	uc := newLivestreamUseCase(new(MockLivestreamRepo))
+
+	_, err := uc.SendChatMessage(context.Background(), "room", "alice", "", "   ")
+	assert.ErrorIs(t, err, entity.ErrEmptyChatMessage)
+
+	_, err = uc.SendChatMessage(context.Background(), "room", "alice", "", strings.Repeat("x", 501))
+	assert.ErrorIs(t, err, entity.ErrChatMessageTooLong)
+
+	msg, err := uc.SendChatMessage(context.Background(), "room", "alice", "", "  hi  ")
+	require.NoError(t, err)
+	assert.Equal(t, "hi", msg.Text)
+	assert.Equal(t, "alice", msg.User.Name)
+	assert.Equal(t, "A", msg.User.Avatar)
+}
+
 func TestUnpublishStream_ReconnectWithinGrace_StaysLive(t *testing.T) {
 	t.Parallel()
 
@@ -88,7 +157,8 @@ func TestUnpublishStream_ReconnectWithinGrace_StaysLive(t *testing.T) {
 	uc := newLivestreamUseCase(repo)
 
 	ls := entity.Livestream{ID: "ls-1", StreamKey: "sk-1", UserID: "user-1", IsLive: true}
-	repo.On("GetByStreamKey", mock.Anything, "sk-1").Return(ls, nil).Once()
+	// Looked up by UnpublishStream and again by the reconnect's ban check.
+	repo.On("GetByStreamKey", mock.Anything, "sk-1").Return(ls, nil).Twice()
 
 	err := uc.UnpublishStream(context.Background(), "sk-1")
 	assert.NoError(t, err)
@@ -134,7 +204,7 @@ func TestHandleDVRComplete_DuringGrace_DiscardedOnReconnect(t *testing.T) {
 	uc := newLivestreamUseCase(repo)
 
 	ls := entity.Livestream{ID: "ls-3", StreamKey: "sk-3", UserID: "user-3", IsLive: true}
-	repo.On("GetByStreamKey", mock.Anything, "sk-3").Return(ls, nil).Once()
+	repo.On("GetByStreamKey", mock.Anything, "sk-3").Return(ls, nil).Twice()
 
 	err := uc.UnpublishStream(context.Background(), "sk-3")
 	assert.NoError(t, err)

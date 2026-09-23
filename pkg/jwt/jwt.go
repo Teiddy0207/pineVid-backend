@@ -25,6 +25,11 @@ func New(secret string, duration time.Duration) *Manager {
 	}
 }
 
+// Duration returns the access token lifetime.
+func (m *Manager) Duration() time.Duration {
+	return m.duration
+}
+
 // GenerateToken creates a new JWT token for the given user ID.
 func (m *Manager) GenerateToken(userID string) (string, error) {
 	token := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, jwtlib.RegisteredClaims{

@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"net"
+	"strings"
 	"time"
 )
 
@@ -40,5 +41,17 @@ func WriteTimeout(timeout time.Duration) Option {
 func ShutdownTimeout(timeout time.Duration) Option {
 	return func(s *Server) {
 		s.shutdownTimeout = timeout
+	}
+}
+
+// TrustedProxies sets the comma-separated reverse-proxy IPs/CIDRs whose
+// X-Forwarded-For header is trusted. Empty = no proxy.
+func TrustedProxies(list string) Option {
+	return func(s *Server) {
+		for _, p := range strings.Split(list, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				s.trustedProxies = append(s.trustedProxies, p)
+			}
+		}
 	}
 }

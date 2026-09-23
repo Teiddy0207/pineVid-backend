@@ -21,6 +21,14 @@ type (
 		List(ctx context.Context, page, limit int) ([]entity.User, int, error)
 	}
 
+	// RefreshTokenRepo -.
+	RefreshTokenRepo interface {
+		Store(ctx context.Context, t *entity.RefreshToken) error
+		GetByHash(ctx context.Context, tokenHash string) (entity.RefreshToken, error)
+		Revoke(ctx context.Context, id, replacedBy string) (bool, error)
+		RevokeAllForUser(ctx context.Context, userID string) error
+	}
+
 	// VideoRepo -.
 	VideoRepo interface {
 		Store(ctx context.Context, video *entity.Video) error

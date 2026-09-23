@@ -32,6 +32,7 @@ type Server struct {
 	readTimeout     time.Duration
 	writeTimeout    time.Duration
 	shutdownTimeout time.Duration
+	trustedProxies  []string
 
 	logger logger.Interface
 }
@@ -58,13 +59,23 @@ func New(l logger.Interface, opts ...Option) *Server {
 		opt(s)
 	}
 
-	app := fiber.New(fiber.Config{
+	cfg := fiber.Config{
 		Prefork:      s.prefork,
 		ReadTimeout:  s.readTimeout,
 		WriteTimeout: s.writeTimeout,
 		JSONDecoder:  json.Unmarshal,
 		JSONEncoder:  json.Marshal,
-	})
+	}
+	// Behind a reverse proxy, ctx.IP() reads X-Forwarded-For — but only when
+	// the TCP peer is one of the trusted proxies, so clients can't spoof it.
+	if len(s.trustedProxies) > 0 {
+		cfg.ProxyHeader = fiber.HeaderXForwardedFor
+		cfg.EnableTrustedProxyCheck = true
+		cfg.TrustedProxies = s.trustedProxies
+		cfg.EnableIPValidation = true
+	}
+
+	app := fiber.New(cfg)
 
 	s.App = app
 

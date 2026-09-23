@@ -15,10 +15,14 @@ type (
 	// User -.
 	User interface {
 		Register(ctx context.Context, username, email, password string) (entity.User, error)
-		Login(ctx context.Context, email, password string) (string, error)
+		Login(ctx context.Context, email, password string) (response.Token, error)
 		RefreshToken(ctx context.Context, refreshToken string) (response.Token, error)
+		Logout(ctx context.Context, refreshToken string) error
 		GetUser(ctx context.Context, userID string) (entity.User, error)
 		UpdateUser(ctx context.Context, userID, username, email, avatar string) (entity.User, error)
+		IsBanned(ctx context.Context, userID string) (bool, error)
+		InvalidateBanCache(userID string)
+		RevokeSessions(ctx context.Context, userID string) error
 	}
 
 	// Video -.
@@ -26,6 +30,7 @@ type (
 		CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error)
 		ConfirmUpload(ctx context.Context, userID string, req request.ConfirmUpload) (response.VideoResponse, error)
 		GetByID(ctx context.Context, id, userID string) (response.VideoResponse, error)
+		EnsureViewable(ctx context.Context, videoID, userID string) error
 		ListPublicVideos(ctx context.Context, userID, category, query string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		GetTrending(ctx context.Context, window, userID string, page, limit int) (response.PageResponse[response.VideoResponse], error)
 		GetReelsFeed(ctx context.Context, userID, window string, page, limit int) (response.PageResponse[response.VideoResponse], error)
@@ -35,7 +40,7 @@ type (
 		UpdateThumbnail(ctx context.Context, userID, videoID string, req request.UpdateThumbnail) (response.VideoResponse, error)
 		DeleteVideo(ctx context.Context, userID, videoID string) error
 		RetryTranscode(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
-		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error
+		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) (string, error)
 		RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error)
 	}
 
@@ -57,7 +62,8 @@ type (
 		GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error)
 		ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error)
 		UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error)
-		SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error)
+		SendChatMessage(ctx context.Context, streamID, username, avatar, text string) (response.ChatMessageResponse, error)
+		KickStream(ctx context.Context, streamKey string) error
 		SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error)
 		ReconcileLiveStreams(ctx context.Context) error
 		BroadcastHeart(streamID string, totalHearts int64)
@@ -88,6 +94,7 @@ type (
 		GetDashboard(ctx context.Context) (response.SystemDashboardResponse, error)
 		GetWorkersStatus(ctx context.Context) ([]response.WorkerStatusResponse, error)
 		BanStream(ctx context.Context, streamID string) error
+		UnbanStream(ctx context.Context, streamID string) error
 		BanVideo(ctx context.Context, videoID string) error
 		ListUsers(ctx context.Context, page, limit int) (response.PageResponse[response.UserResponse], error)
 		BanUser(ctx context.Context, userID string) error

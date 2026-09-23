@@ -20,9 +20,10 @@ import (
 
 func NewRouter(app *fiber.App, cfg *config.Config, u usecase.User, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, ps usecase.Post, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, up usecase.UserPreference, sv usecase.SavedVideo, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
 	// CORS Middleware
+	// Only the configured frontend origin(s) may call the API from a browser.
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowOrigins: cfg.HTTP.CORSAllowOrigins,
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Device-ID",
 		AllowMethods: "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
 	}))
 
@@ -52,6 +53,7 @@ func NewRouter(app *fiber.App, cfg *config.Config, u usecase.User, vd usecase.Vi
 			apiV1Group.Use(otelfiber.Middleware())
 		}
 
-		v1.NewRoutes(apiV1Group, u, vd, ls, ad, lk, cm, ps, rc, hs, fw, nt, vb, sub, up, sv, hub, chatHub, jwtManager, l)
+		rl := middleware.NewRateLimiter(cfg.Security.RateLimitEnabled)
+		v1.NewRoutes(apiV1Group, u, vd, ls, ad, lk, cm, ps, rc, hs, fw, nt, vb, sub, up, sv, hub, chatHub, jwtManager, cfg.Security.InternalWebhookSecret, rl, l)
 	}
 }

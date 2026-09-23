@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
@@ -23,6 +22,25 @@ import (
 func getUserID(ctx *fiber.Ctx) string {
 	userID, _ := ctx.Locals("userID").(string)
 	return userID
+}
+
+// videoViewable guards per-video endpoints: it writes a 404 (or 500) and
+// returns false when the caller may not access videoID — private, banned or
+// unfinished videos of someone else (see entity.Video.ViewableBy).
+// Usage: if ok, err := r.videoViewable(ctx, id); !ok { return err }
+func (r *V1) videoViewable(ctx *fiber.Ctx, videoID string) (bool, error) {
+	userID, _ := ctx.Locals("userID").(string)
+
+	err := r.vd.EnsureViewable(ctx.UserContext(), videoID, userID)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, entity.ErrVideoNotFound) {
+		return false, errorResponse(ctx, http.StatusNotFound, "video not found")
+	}
+
+	r.l.Error(err, "restapi - v1 - videoViewable")
+	return false, errorResponse(ctx, http.StatusInternalServerError, "internal server error")
 }
 
 // @Summary      List public videos
@@ -121,10 +139,10 @@ func (r *V1) getVideo(ctx *fiber.Ctx) error {
 
 	resDTO, err := r.vd.GetByID(ctx.UserContext(), id, userID)
 	if err != nil {
-		r.l.Error(err, "restapi - v1 - getVideo")
 		if errors.Is(err, entity.ErrVideoNotFound) {
 			return errorResponse(ctx, http.StatusNotFound, "video not found")
 		}
+		r.l.Error(err, "restapi - v1 - getVideo")
 		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
 	}
 
@@ -190,6 +208,12 @@ func (r *V1) confirmVideoUpload(ctx *fiber.Ctx) error {
 	resDTO, err := r.vd.ConfirmUpload(ctx.UserContext(), userID, body)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - confirmVideoUpload")
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to confirm upload")
 	}
 
@@ -242,14 +266,16 @@ func (r *V1) transcodeCallback(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, err.Error())
 	}
 
-	if err := r.vd.HandleTranscodeCallback(ctx.UserContext(), body.VideoID, body.Status, body.HLSMasterURL); err != nil {
+	ownerID, err := r.vd.HandleTranscodeCallback(ctx.UserContext(), body.VideoID, body.Status, body.HLSMasterURL)
+	if err != nil {
 		r.l.Error(err, "restapi - v1 - transcodeCallback")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to update transcode status")
 	}
 
-	// Broadcast SSE event to all connected clients
+	// Push the status change to the owner's open Studio tabs only.
 	if r.hub != nil {
 		r.hub.Broadcast(events.VideoEvent{
+			UserID:  ownerID,
 			VideoID: body.VideoID,
 			Status:  body.Status,
 			HLSUrl:  body.HLSMasterURL,
@@ -262,16 +288,16 @@ func (r *V1) transcodeCallback(ctx *fiber.Ctx) error {
 }
 
 // sseVideoEvents streams real-time video status updates to the frontend via Server-Sent Events
+// Only events for the caller's own videos are delivered (SSEAuth sets userID).
 func (r *V1) sseVideoEvents(ctx *fiber.Ctx) error {
-	ctx.Context().Response.Header.Set("Access-Control-Allow-Origin", "*")
-	ctx.Context().Response.Header.Set("Access-Control-Allow-Headers", "*")
-	ctx.Context().Response.Header.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	userID := getUserID(ctx)
+
 	ctx.Context().Response.Header.Set("Content-Type", "text/event-stream")
 	ctx.Context().Response.Header.Set("Cache-Control", "no-cache")
 	ctx.Context().Response.Header.Set("Connection", "keep-alive")
 
 	ctx.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		ch, unsub := r.hub.Subscribe()
+		ch, unsub := r.hub.Subscribe(userID)
 		defer unsub()
 
 		// Immediate heartbeat to flush 200 OK headers to browser EventSource
@@ -335,10 +361,14 @@ func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "video id required")
 	}
 
-	clientIP := ctx.IP()
-	if xff := ctx.Get("X-Forwarded-For"); xff != "" {
-		clientIP = strings.Split(xff, ",")[0]
+	if ok, err := r.videoViewable(ctx, videoID); !ok {
+		return err
 	}
+
+	// ctx.IP() only honours X-Forwarded-For from HTTP_TRUSTED_PROXIES (see
+	// httpserver config); reading the header directly would let any client
+	// pick a fresh fake IP per request and bypass view dedup.
+	clientIP := ctx.IP()
 
 	deviceID := ctx.Get("X-Device-ID")
 	if deviceID == "" {
@@ -386,6 +416,10 @@ func (r *V1) updateVideo(ctx *fiber.Ctx) error {
 	if err := ctx.BodyParser(&body); err != nil {
 		r.l.Error(err, "restapi - v1 - updateVideo")
 		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := r.v.Struct(body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
 	}
 
 	resDTO, err := r.vd.UpdateVideo(ctx.UserContext(), userID, id, body)
@@ -513,6 +547,9 @@ func (r *V1) retryTranscode(ctx *fiber.Ctx) error {
 // @Router       /v1/videos/{id}/subtitles [get]
 func (r *V1) getVideoSubtitles(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
+	if ok, err := r.videoViewable(ctx, id); !ok {
+		return err
+	}
 
 	resDTO, err := r.sub.GetSubtitles(ctx.UserContext(), id)
 	if err != nil {

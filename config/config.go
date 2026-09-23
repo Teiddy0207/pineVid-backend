@@ -11,21 +11,22 @@ import (
 type (
 	// Config -.
 	Config struct {
-		App     app
-		HTTP    http
-		Log     log
-		PG      pg
-		GRPC    grpc
-		RMQ     rmq
-		NATS    nats
-		JWT     jwt
-		Redis   redis
-		Metrics metrics
-		Swagger swagger
-		Tracing tracing
-		Minio   minio
-		DVR     dvr
-		SRS     srs
+		App      app
+		HTTP     http
+		Log      log
+		PG       pg
+		GRPC     grpc
+		RMQ      rmq
+		NATS     nats
+		JWT      jwt
+		Redis    redis
+		Metrics  metrics
+		Swagger  swagger
+		Tracing  tracing
+		Minio    minio
+		DVR      dvr
+		SRS      srs
+		Security security
 	}
 
 	// App -.
@@ -38,6 +39,14 @@ type (
 	http struct {
 		Port           string `env:"HTTP_PORT,required"`
 		UsePreforkMode bool   `env:"HTTP_USE_PREFORK_MODE" envDefault:"false"`
+		// CORSAllowOrigins is a comma-separated list of browser origins
+		// allowed to call the API (the Next.js frontend).
+		CORSAllowOrigins string `env:"CORS_ALLOW_ORIGINS" envDefault:"http://localhost:3000"`
+		// TrustedProxies is a comma-separated list of reverse-proxy IPs/CIDRs
+		// (e.g. nginx) whose X-Forwarded-For header is trusted for the real
+		// client IP. Empty = no proxy: ctx.IP() is the TCP peer address and a
+		// client-supplied X-Forwarded-For is ignored.
+		TrustedProxies string `env:"HTTP_TRUSTED_PROXIES" envDefault:""`
 	}
 
 	// Log -.
@@ -71,8 +80,9 @@ type (
 
 	// JWT -.
 	jwt struct {
-		Secret      string        `env:"JWT_SECRET,required"`
-		TokenExpiry time.Duration `env:"JWT_TOKEN_EXPIRY" envDefault:"24h"`
+		Secret             string        `env:"JWT_SECRET,required"`
+		TokenExpiry        time.Duration `env:"JWT_TOKEN_EXPIRY" envDefault:"1h"`
+		RefreshTokenExpiry time.Duration `env:"JWT_REFRESH_TOKEN_EXPIRY" envDefault:"168h"`
 	}
 
 	// Redis -.
@@ -119,6 +129,17 @@ type (
 	srs struct {
 		APIURL            string        `env:"SRS_API_URL" envDefault:"http://localhost:1985"`
 		ReconcileInterval time.Duration `env:"SRS_RECONCILE_INTERVAL" envDefault:"15s"`
+	}
+
+	// Security -.
+	security struct {
+		// InternalWebhookSecret authenticates service-to-service webhooks
+		// (transcode callback/heartbeat, SRS http_hooks). Must match the
+		// transcode worker's INTERNAL_WEBHOOK_SECRET and the ?secret= in the
+		// SRS hook URLs.
+		InternalWebhookSecret string `env:"INTERNAL_WEBHOOK_SECRET,required"`
+		// RateLimitEnabled can be turned off for load tests (bot/).
+		RateLimitEnabled bool `env:"RATE_LIMIT_ENABLED" envDefault:"true"`
 	}
 )
 

@@ -15,7 +15,6 @@ type UserResponse struct {
 type ChannelDetailsResponse struct {
 	ID               string `json:"id"`
 	Username         string `json:"username"`
-	Email            string `json:"email"`
 	Avatar           string `json:"avatar"`
 	Bio              string `json:"bio"`
 	SubscribersCount int64  `json:"subscribers_count"`

@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"time"
+
 	"github.com/evrone/go-clean-template/internal/controller/restapi/middleware"
 	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/evrone/go-clean-template/internal/usecase"
@@ -11,20 +13,25 @@ import (
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, ps usecase.Post, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, up usecase.UserPreference, sv usecase.SavedVideo, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, l logger.Interface) {
+func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, ps usecase.Post, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, up usecase.UserPreference, sv usecase.SavedVideo, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, internalSecret string, rl *middleware.RateLimiter, l logger.Interface) {
 	r := &V1{u: u, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, ps: ps, rc: rc, hs: hs, fw: fw, notif: nt, vocab: vb, sub: sub, up: up, sv: sv, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+
+	auth := middleware.Auth(jwtManager, u)
+	optionalAuth := middleware.OptionalAuth(jwtManager, u)
+	internalOnly := middleware.RequireInternalSecret(internalSecret)
 
 	// Public routes
 	authGroup := apiV1Group.Group("/auth")
 	{
-		authGroup.Post("/register", r.register)
-		authGroup.Post("/login", r.login)
-		authGroup.Post("/refresh", r.refreshToken)
+		authGroup.Post("/register", rl.Limit("register", 5, time.Minute), r.register)
+		authGroup.Post("/login", rl.Limit("login", 10, time.Minute), r.login)
+		authGroup.Post("/refresh", rl.Limit("refresh", 30, time.Minute), r.refreshToken)
+		authGroup.Post("/logout", r.logout)
 	}
 
 	apiV1Group.Get("/dictionary/lookup", r.lookupDictionary)
 
-	videosPublicGroup := apiV1Group.Group("/videos", middleware.OptionalAuth(jwtManager))
+	videosPublicGroup := apiV1Group.Group("/videos", optionalAuth)
 	{
 		videosPublicGroup.Get("/", r.listPublicVideos)
 		videosPublicGroup.Get("/trending", r.listTrendingVideos)
@@ -32,11 +39,11 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		videosPublicGroup.Get("/feed/personalized", r.getPersonalizedFeed)
 		videosPublicGroup.Get("/:id", r.getVideo)
 		videosPublicGroup.Get("/:id/subtitles", r.getVideoSubtitles)
-		videosPublicGroup.Post("/:id/views", r.recordVideoView)
+		videosPublicGroup.Post("/:id/views", rl.Limit("views", 60, time.Minute), r.recordVideoView)
 		videosPublicGroup.Get("/:id/comments", r.listVideoComments)
 	}
 
-	commentsPublicGroup := apiV1Group.Group("/comments", middleware.OptionalAuth(jwtManager))
+	commentsPublicGroup := apiV1Group.Group("/comments", optionalAuth)
 	{
 		commentsPublicGroup.Get("/:id/replies", r.listCommentReplies)
 	}
@@ -45,50 +52,55 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 	// OptionalAuth caller with no token would otherwise be indistinguishable
 	// from every other anonymous visitor, corrupting per-user like/comment
 	// state (see BUSINESS_REQUIREMENTS.md).
-	videosProtectedGroup := apiV1Group.Group("/videos", middleware.Auth(jwtManager))
+	videosProtectedGroup := apiV1Group.Group("/videos", auth)
 	{
-		videosProtectedGroup.Post("/:id/like", r.toggleLikeVideo)
-		videosProtectedGroup.Post("/:id/comments", r.createComment)
-		videosProtectedGroup.Post("/:id/save", r.toggleSaveVideo)
+		videosProtectedGroup.Post("/:id/like", rl.Limit("like", 60, time.Minute), r.toggleLikeVideo)
+		videosProtectedGroup.Post("/:id/comments", rl.Limit("comment", 10, time.Minute), r.createComment)
+		videosProtectedGroup.Post("/:id/save", rl.Limit("save", 60, time.Minute), r.toggleSaveVideo)
 	}
 
-	commentsProtectedGroup := apiV1Group.Group("/comments", middleware.Auth(jwtManager))
+	commentsProtectedGroup := apiV1Group.Group("/comments", auth)
 	{
-		commentsProtectedGroup.Post("/:id/like", r.toggleLikeComment)
+		commentsProtectedGroup.Post("/:id/like", rl.Limit("comment-like", 60, time.Minute), r.toggleLikeComment)
 	}
 
-	postsGroup := apiV1Group.Group("/posts", middleware.Auth(jwtManager))
+	postsGroup := apiV1Group.Group("/posts", auth)
 	{
-		postsGroup.Post("/", r.createPost)
-		postsGroup.Post("/:id/like", r.togglePostLike)
+		postsGroup.Post("/", rl.Limit("post", 5, time.Minute), r.createPost)
+		postsGroup.Post("/:id/like", rl.Limit("post-like", 60, time.Minute), r.togglePostLike)
 		postsGroup.Delete("/:id", r.deletePost)
 	}
 
-	channelsPublicGroup := apiV1Group.Group("/channels", middleware.OptionalAuth(jwtManager))
+	channelsPublicGroup := apiV1Group.Group("/channels", optionalAuth)
 	{
 		channelsPublicGroup.Get("/:id", r.getChannelDetails)
 		channelsPublicGroup.Get("/:id/posts", r.listUserPosts)
 	}
 
-	apiV1Group.Post("/transcode/callback", r.transcodeCallback)
-	apiV1Group.Post("/admin/workers/heartbeat", r.recordWorkerHeartbeat) // Internal webhook: transcode worker self-report
-	apiV1Group.Get("/events/videos", r.sseVideoEvents)
+	// Internal service-to-service webhooks: transcode worker + SRS http_hooks.
+	apiV1Group.Post("/transcode/callback", internalOnly, r.transcodeCallback)
+	apiV1Group.Post("/admin/workers/heartbeat", internalOnly, r.recordWorkerHeartbeat)
+
+	// SSE streams. Video status and notifications are per-user, so they need
+	// the viewer's identity (passed as ?token= since EventSource can't set
+	// headers); a live chat room is public to watch.
+	apiV1Group.Get("/events/videos", middleware.SSEAuth(jwtManager, u), r.sseVideoEvents)
 	apiV1Group.Get("/events/chat/:id", r.sseChatEvents)
-	apiV1Group.Get("/events/notifications", r.sseNotificationEvents)
+	apiV1Group.Get("/events/notifications", middleware.SSEAuth(jwtManager, u), r.sseNotificationEvents)
 
 	livePublicGroup := apiV1Group.Group("/live")
 	{
 		livePublicGroup.Get("/streams", r.listActiveStreams)
 		livePublicGroup.Get("/streams/:id", r.getStream)
-		livePublicGroup.Post("/streams/:id/chat", r.sendChatMessage)
-		livePublicGroup.Post("/streams/:id/heart", r.heartStream)
-		livePublicGroup.Post("/auth", r.authenticateRTMPStreamKey)      // Internal Webhook for SRS on_publish
-		livePublicGroup.Post("/unpublish", r.unpublishRTMPStream)       // Internal Webhook for SRS on_unpublish
-		livePublicGroup.Post("/dvr", r.handleDVRComplete)               // Internal Webhook for SRS on_dvr
+		livePublicGroup.Post("/streams/:id/chat", auth, rl.Limit("chat", 20, 30*time.Second), r.sendChatMessage)
+		livePublicGroup.Post("/streams/:id/heart", optionalAuth, rl.Limit("heart", 120, time.Minute), r.heartStream)
+		livePublicGroup.Post("/auth", internalOnly, r.authenticateRTMPStreamKey) // SRS on_publish
+		livePublicGroup.Post("/unpublish", internalOnly, r.unpublishRTMPStream)  // SRS on_unpublish
+		livePublicGroup.Post("/dvr", internalOnly, r.handleDVRComplete)          // SRS on_dvr
 	}
 
 	// Protected routes
-	protected := apiV1Group.Group("", middleware.Auth(jwtManager))
+	protected := apiV1Group.Group("", auth)
 
 	vocabGroup := protected.Group("/vocabulary")
 	{
@@ -115,12 +127,12 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		userGroup.Get("/saved", r.listSavedVideos)
 	}
 
-	protected.Post("/channels/:id/follow", r.toggleFollowChannel)
+	protected.Post("/channels/:id/follow", rl.Limit("follow", 30, time.Minute), r.toggleFollowChannel)
 
 	studioGroup := protected.Group("/studio")
 	{
 		studioGroup.Get("/videos", r.listStudioVideos)
-		studioGroup.Post("/upload-url", r.createVideoUpload)
+		studioGroup.Post("/upload-url", rl.Limit("upload", 20, time.Hour), r.createVideoUpload)
 		studioGroup.Post("/confirm-upload", r.confirmVideoUpload)
 		studioGroup.Post("/videos/:id/publish", r.publishVideo)
 		studioGroup.Post("/videos/:id/subtitles", r.uploadVideoSubtitles)
@@ -133,16 +145,15 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		studioGroup.Put("/live/info", r.updateStreamInfo)
 	}
 
-
 	adminGroup := protected.Group("/admin", middleware.RequireAdmin(r.u))
 	{
 		adminGroup.Get("/dashboard", r.getAdminDashboard)
 		adminGroup.Get("/workers", r.getAdminWorkers)
 		adminGroup.Post("/streams/:id/ban", r.banStream)
+		adminGroup.Post("/streams/:id/unban", r.unbanStream)
 		adminGroup.Post("/videos/:id/ban", r.banVideo)
 		adminGroup.Get("/users", r.listAdminUsers)
 		adminGroup.Post("/users/:id/ban", r.banUser)
 		adminGroup.Post("/users/:id/unban", r.unbanUser)
 	}
-
 }

@@ -41,7 +41,7 @@ func (c *AuthController) Login(ctx context.Context, req *v1.LoginRequest) (*v1.L
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
 
-	return &v1.LoginResponse{Token: token}, nil
+	return &v1.LoginResponse{Token: token.Token}, nil
 }
 
 // GetProfile -.

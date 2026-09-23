@@ -80,6 +80,14 @@ func (u *UseCase) ConfirmUpload(ctx context.Context, userID string, req request.
 	if err != nil {
 		return response.VideoResponse{}, err
 	}
+	if v.UserID != userID {
+		return response.VideoResponse{}, entity.ErrVideoForbidden
+	}
+	// Only a freshly created upload can be confirmed; confirming again must
+	// not enqueue a second transcode job for the same file.
+	if v.Status != entity.VideoStatusPending {
+		return mapper.ToVideoResponse(v), nil
+	}
 
 	v.Status = entity.VideoStatusProcessing
 	v.UpdatedAt = time.Now().UTC()
@@ -104,6 +112,11 @@ func (u *UseCase) GetByID(ctx context.Context, id, userID string) (response.Vide
 	if err != nil {
 		return response.VideoResponse{}, err
 	}
+	// Private/banned/unfinished videos look exactly like missing ones to
+	// anyone but the owner, so their existence isn't leaked either.
+	if !v.ViewableBy(userID) {
+		return response.VideoResponse{}, entity.ErrVideoNotFound
+	}
 	if u.viewRepo != nil {
 		v.Views += u.viewRepo.GetPendingViewsForVideo(ctx, id)
 	}
@@ -123,6 +136,20 @@ func (u *UseCase) GetByID(ctx context.Context, id, userID string) (response.Vide
 		}
 	}
 	return resDTO, nil
+}
+
+// EnsureViewable returns entity.ErrVideoNotFound unless userID may watch the
+// video (see entity.Video.ViewableBy). Guards every per-video endpoint that
+// isn't GetByID itself: subtitles, comments, likes, saves, views.
+func (u *UseCase) EnsureViewable(ctx context.Context, videoID, userID string) error {
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return err
+	}
+	if !v.ViewableBy(userID) {
+		return entity.ErrVideoNotFound
+	}
+	return nil
 }
 
 // trendingScanLimit is how many top-ranked IDs GetTrending pulls from Redis
@@ -427,14 +454,29 @@ func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error
 	return u.repo.Delete(ctx, videoID)
 }
 
-
-func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) error {
+// HandleTranscodeCallback applies a transcode worker result and returns the
+// video's owner ID (so the caller can route the SSE status event to them).
+// It is idempotent: NATS may redeliver a job, so a repeated "complete" for an
+// already-complete video is a no-op, and a banned video is never revived.
+func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) (string, error) {
 	v, err := u.repo.GetByID(ctx, videoID)
 	if err != nil {
-		return fmt.Errorf("VideoUseCase - HandleTranscodeCallback - GetByID: %w", err)
+		return "", fmt.Errorf("VideoUseCase - HandleTranscodeCallback - GetByID: %w", err)
+	}
+
+	if v.Status == entity.VideoStatusBanned {
+		return v.UserID, nil
 	}
 
 	wasComplete := v.Status == entity.VideoStatusComplete
+	if wasComplete && status == "complete" && (hlsMasterURL == "" || hlsMasterURL == v.HLSUrl) {
+		return v.UserID, nil
+	}
+	// A late "failed" from a redelivered attempt must not clobber a video
+	// that another attempt already finished successfully.
+	if wasComplete && status == "failed" {
+		return v.UserID, nil
+	}
 
 	if status == "complete" {
 		v.Status = entity.VideoStatusComplete
@@ -447,7 +489,7 @@ func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, 
 
 	v.UpdatedAt = time.Now().UTC()
 	if err := u.repo.Update(ctx, &v); err != nil {
-		return err
+		return "", err
 	}
 
 	// Notify followers once a public video is actually watchable — not at
@@ -469,6 +511,5 @@ func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, 
 		}()
 	}
 
-	return nil
+	return v.UserID, nil
 }
-

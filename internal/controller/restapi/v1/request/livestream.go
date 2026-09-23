@@ -12,8 +12,8 @@ type UpdateLivestreamInfo struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 }
 
+// SendChatMessage — the sender's name/avatar are taken from the
+// authenticated account, not from the request.
 type SendChatMessage struct {
-	Username string `json:"username"`
-	Avatar   string `json:"avatar"`
-	Text     string `json:"text" validate:"required"`
+	Text string `json:"text" validate:"required"`
 }

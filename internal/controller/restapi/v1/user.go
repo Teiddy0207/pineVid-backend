@@ -11,7 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-
 // @Summary     Register
 // @Description Register a new user
 // @ID          register
@@ -80,7 +79,7 @@ func (r *V1) login(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
 	}
 
-	token, err := r.u.Login(ctx.UserContext(), body.Email, body.Password)
+	tokens, err := r.u.Login(ctx.UserContext(), body.Email, body.Password)
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - login")
 
@@ -94,11 +93,11 @@ func (r *V1) login(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
 	}
 
-	return ctx.Status(http.StatusOK).JSON(response.Token{Token: token})
+	return ctx.Status(http.StatusOK).JSON(tokens)
 }
 
 // @Summary     Refresh access token
-// @Description Obtain a new JWT access token using a valid refresh token
+// @Description Exchange a refresh token for a new access token + refresh token pair. The presented refresh token is revoked (rotation); reusing it later revokes all of the user's sessions.
 // @ID          refreshToken
 // @Tags        Auth
 // @Accept      json
@@ -137,6 +136,33 @@ func (r *V1) refreshToken(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(tokenDTO)
 }
 
+// @Summary     Logout
+// @Description Revoke the given refresh token. The short-lived access token simply expires.
+// @ID          logout
+// @Tags        Auth
+// @Accept      json
+// @Param       request body request.RefreshToken true "Refresh token to revoke"
+// @Success     204
+// @Failure     400 {object} response.Error
+// @Router      /v1/auth/logout [post]
+func (r *V1) logout(ctx *fiber.Ctx) error {
+	var body request.RefreshToken
+
+	if err := ctx.BodyParser(&body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := r.v.Struct(body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := r.u.Logout(ctx.UserContext(), body.RefreshToken); err != nil {
+		r.l.Error(err, "restapi - v1 - logout")
+		return errorResponse(ctx, http.StatusInternalServerError, "internal server error")
+	}
+
+	return ctx.SendStatus(http.StatusNoContent)
+}
 
 // @Summary     Get profile
 // @Description Get current user profile
@@ -244,7 +270,6 @@ func (r *V1) getChannelDetails(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(response.ChannelDetailsResponse{
 		ID:               user.ID,
 		Username:         user.Username,
-		Email:            user.Email,
 		Avatar:           user.Avatar,
 		Bio:              "Verified Content Creator on PipeVid Platform.",
 		SubscribersCount: subCount,

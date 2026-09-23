@@ -63,10 +63,11 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 }
 
 // @Summary      Send chat message
-// @Description  Send a real-time message to a live stream chat room
+// @Description  Send a real-time message to a live stream chat room (login required; sender name/avatar come from the account)
 // @Tags         Livestream
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id path string true "Livestream ID"
 // @Param        request body request.SendChatMessage true "Chat message payload"
 // @Success      200 {object} response.ChatMessageResponse
@@ -84,10 +85,20 @@ func (r *V1) sendChatMessage(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "text cannot be empty")
 	}
 
-	resDTO, err := r.ls.SendChatMessage(ctx.UserContext(), id, req)
+	// Sender identity comes from the authenticated account, never the body.
+	user, err := r.u.GetUser(ctx.UserContext(), getUserID(ctx))
 	if err != nil {
+		r.l.Error(err, "restapi - v1 - sendChatMessage - GetUser")
+		return errorResponse(ctx, http.StatusUnauthorized, "unauthorized")
+	}
+
+	resDTO, err := r.ls.SendChatMessage(ctx.UserContext(), id, user.Username, user.Avatar, req.Text)
+	if err != nil {
+		if errors.Is(err, entity.ErrEmptyChatMessage) || errors.Is(err, entity.ErrChatMessageTooLong) {
+			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
 		r.l.Error(err, "restapi - v1 - sendChatMessage")
-		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to send chat message")
 	}
 
 	return ctx.Status(http.StatusOK).JSON(resDTO)
@@ -111,7 +122,6 @@ func (r *V1) sseChatEvents(ctx *fiber.Ctx) error {
 	ctx.Set("Content-Type", "text/event-stream")
 	ctx.Set("Cache-Control", "no-cache")
 	ctx.Set("Connection", "keep-alive")
-	ctx.Set("Access-Control-Allow-Origin", "*")
 
 	ch, unsubscribe, err := r.ls.SubscribeChat(streamID)
 	if err != nil {

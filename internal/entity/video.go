@@ -27,6 +27,10 @@ const (
 	VideoStatusProcessing VideoStatus = "processing"
 	VideoStatusComplete   VideoStatus = "complete"
 	VideoStatusFailed     VideoStatus = "failed"
+	// VideoStatusBanned is set by an admin takedown. Every public listing
+	// already filters on status = complete, so a banned video disappears
+	// everywhere; GetByID hides it from everyone except its owner.
+	VideoStatusBanned VideoStatus = "banned"
 )
 
 type VideoVisibility string
@@ -55,4 +59,15 @@ type Video struct {
 	Views        int64           `json:"views"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+// ViewableBy reports whether userID ("" = anonymous) may watch this video.
+// The owner can always see their own video (the Studio shows its state);
+// everyone else only sees finished, non-banned, non-private videos.
+// Unlisted videos are viewable by anyone who has the link, like YouTube.
+func (v Video) ViewableBy(userID string) bool {
+	if userID != "" && v.UserID == userID {
+		return true
+	}
+	return v.Status == VideoStatusComplete && v.Visibility != VideoVisibilityPrivate
 }

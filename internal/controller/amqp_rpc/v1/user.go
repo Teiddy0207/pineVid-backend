@@ -59,6 +59,6 @@ func (r *V1) login() server.CallHandler {
 			return nil, fmt.Errorf("amqp_rpc - V1 - login: %w", err)
 		}
 
-		return response.Token{Token: token}, nil
+		return response.Token{Token: token.Token}, nil
 	}
 }

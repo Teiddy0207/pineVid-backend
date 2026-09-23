@@ -124,7 +124,7 @@ func TestHandleTranscodeCallback_NotifiesFollowersOnFirstPublicComplete(t *testi
 	repo.On("GetByID", mock.Anything, "v1").Return(existing, nil)
 	repo.On("Update", mock.Anything, mock.Anything).Return(nil)
 
-	err := uc.HandleTranscodeCallback(context.Background(), "v1", "complete", "/hls/v1/master.m3u8")
+	_, err := uc.HandleTranscodeCallback(context.Background(), "v1", "complete", "/hls/v1/master.m3u8")
 
 	require.NoError(t, err)
 	notif.expectCall(t)
@@ -146,7 +146,7 @@ func TestHandleTranscodeCallback_NoNotifyWhenAlreadyComplete(t *testing.T) {
 
 	// A duplicate/retried transcode callback for an already-complete video
 	// must not spam followers a second time.
-	err := uc.HandleTranscodeCallback(context.Background(), "v2", "complete", "/hls/v2/master.m3u8")
+	_, err := uc.HandleTranscodeCallback(context.Background(), "v2", "complete", "/hls/v2/master.m3u8")
 
 	require.NoError(t, err)
 	notif.expectNoCall(t)
@@ -166,7 +166,7 @@ func TestHandleTranscodeCallback_NoNotifyWhenPrivate(t *testing.T) {
 	repo.On("GetByID", mock.Anything, "v3").Return(existing, nil)
 	repo.On("Update", mock.Anything, mock.Anything).Return(nil)
 
-	err := uc.HandleTranscodeCallback(context.Background(), "v3", "complete", "/hls/v3/master.m3u8")
+	_, err := uc.HandleTranscodeCallback(context.Background(), "v3", "complete", "/hls/v3/master.m3u8")
 
 	require.NoError(t, err)
 	notif.expectNoCall(t)
@@ -188,7 +188,7 @@ func TestHandleTranscodeCallback_NoNotifyWhenFailed(t *testing.T) {
 		return v.Status == entity.VideoStatusFailed
 	})).Return(nil)
 
-	err := uc.HandleTranscodeCallback(context.Background(), "v4", "failed", "")
+	_, err := uc.HandleTranscodeCallback(context.Background(), "v4", "failed", "")
 
 	require.NoError(t, err)
 	notif.expectNoCall(t)

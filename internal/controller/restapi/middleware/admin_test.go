@@ -24,7 +24,13 @@ type fakeUserUseCase struct {
 func (f *fakeUserUseCase) Register(context.Context, string, string, string) (entity.User, error) {
 	return entity.User{}, nil
 }
-func (f *fakeUserUseCase) Login(context.Context, string, string) (string, error) { return "", nil }
+func (f *fakeUserUseCase) Login(context.Context, string, string) (response.Token, error) {
+	return response.Token{}, nil
+}
+func (f *fakeUserUseCase) Logout(context.Context, string) error           { return nil }
+func (f *fakeUserUseCase) IsBanned(context.Context, string) (bool, error) { return false, nil }
+func (f *fakeUserUseCase) InvalidateBanCache(string)                      {}
+func (f *fakeUserUseCase) RevokeSessions(context.Context, string) error   { return nil }
 func (f *fakeUserUseCase) RefreshToken(context.Context, string) (response.Token, error) {
 	return response.Token{}, nil
 }

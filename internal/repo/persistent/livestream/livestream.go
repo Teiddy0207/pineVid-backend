@@ -42,10 +42,11 @@ var livestreamSelectColumns = []string{
 	"ls.id", "ls.user_id", "COALESCE(u.username, u.email, 'Streamer')", "COALESCE(u.avatar_url, '')",
 	"ls.stream_key", "ls.title", "ls.category", "ls.is_live", "ls.hls_url", "ls.viewers_count",
 	"ls.started_at", "ls.ended_at", "ls.created_at", "ls.updated_at",
+	"ls.is_banned", "COALESCE(u.is_banned, FALSE)",
 }
 
 func scanLivestream(row pgx.Row, ls *entity.Livestream) error {
-	return row.Scan(&ls.ID, &ls.UserID, &ls.UserName, &ls.UserAvatar, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt)
+	return row.Scan(&ls.ID, &ls.UserID, &ls.UserName, &ls.UserAvatar, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt, &ls.IsBanned, &ls.OwnerBanned)
 }
 
 func (r *Repo) GetByID(ctx context.Context, id string) (entity.Livestream, error) {
@@ -178,6 +179,7 @@ func (r *Repo) Update(ctx context.Context, ls *entity.Livestream) error {
 		Set("viewers_count", ls.ViewersCount).
 		Set("started_at", ls.StartedAt).
 		Set("ended_at", ls.EndedAt).
+		Set("is_banned", ls.IsBanned).
 		Set("updated_at", ls.UpdatedAt).
 		Where(sq.Eq{"id": ls.ID}).
 		ToSql()

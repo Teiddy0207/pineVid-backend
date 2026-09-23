@@ -3,12 +3,12 @@ x-db-environment: &x-db-environment
   POSTGRES_HOST: "db"
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "db"
-  POSTGRES_PASSWORD: "myAwEsOm3pa55@w0rd"
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in backend/.env}"
   POSTGRES_USER: "user"
 
 x-rabbitmq-variables: &x-rabbitmq-variables
-  RABBITMQ_DEFAULT_USER: "guest"
-  RABBITMQ_DEFAULT_PASS: "guest"
+  RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:-guest}"
+  RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-guest}"
 
 x-backend-app-environment: &x-backend-app-environment
   GOMAXPROCS: "1"
@@ -22,16 +22,16 @@ x-backend-app-environment: &x-backend-app-environment
   LOG_LEVEL: "debug"
   # PG
   PG_POOL_MAX: "2"
-  PG_URL: "postgres://user:myAwEsOm3pa55@w0rd@db:5432/db"
+  PG_URL: "postgres://user:${POSTGRES_PASSWORD}@db:5432/db"
   # gRPC
   GRPC_PORT: "8081"
   # RMQ
   RMQ_RPC_SERVER: "rpc_server"
   RMQ_RPC_CLIENT: "rpc_client"
-  RMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  RMQ_URL: "amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/"
   # NATS
   NATS_RPC_SERVER: "rpc_server"
-  NATS_URL: "nats://guest:guest@nats:4222/"
+  NATS_URL: "nats://${NATS_USER:?set NATS_USER in backend/.env}:${NATS_PASSWORD:?set NATS_PASSWORD in backend/.env}@nats:4222/"
   # Metrics
   METRICS_ENABLED: "true"
   # Swagger
@@ -40,10 +40,18 @@ x-backend-app-environment: &x-backend-app-environment
   TRACING_ENABLED: "true"
   TRACING_OTLP_ENDPOINT: "jaeger:4317"
   TRACING_OTLP_INSECURE: "true"
-  TRACING_SAMPLE_RATE: "1.0"  # DON'T set to 1.0 in production, use a lower value like 0.1 or 0.01
+  TRACING_SAMPLE_RATE: "${TRACING_SAMPLE_RATE:-0.1}"
   # JWT
-  JWT_SECRET: "your-secret-key-change-in-production"
-  JWT_TOKEN_EXPIRY: "24h"
+  JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in backend/.env}"
+  JWT_TOKEN_EXPIRY: "${JWT_TOKEN_EXPIRY:-1h}"
+  JWT_REFRESH_TOKEN_EXPIRY: "${JWT_REFRESH_TOKEN_EXPIRY:-168h}"
+  # Shared with the transcode worker and SRS hooks (service-to-service auth)
+  INTERNAL_WEBHOOK_SECRET: "${INTERNAL_WEBHOOK_SECRET:?set INTERNAL_WEBHOOK_SECRET in backend/.env}"
+  # Browser origins allowed by CORS (the Next.js frontend)
+  CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:3000}"
+  # nginx sits in front of the app on the compose network; trust its
+  # X-Forwarded-For for the real client IP (view dedup, rate limits)
+  HTTP_TRUSTED_PROXIES: "${HTTP_TRUSTED_PROXIES:-172.16.0.0/12}"
   # Redis (view counter dedup + like cache)
   REDIS_URL: "redis:6379"
   # MinIO (raw video / DVR storage)
@@ -51,8 +59,8 @@ x-backend-app-environment: &x-backend-app-environment
   # SRS's own http_api (read-only stream list), polled for is_live
   # reconciliation — must be the in-cluster service name, not localhost.
   SRS_API_URL: "http://srs:1985"
-  MINIO_ACCESS_KEY: "minioadmin"
-  MINIO_SECRET_KEY: "minioadmin123"
+  MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:?set MINIO_ROOT_USER in backend/.env}"
+  MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in backend/.env}"
   MINIO_USE_SSL: "false"
   # DVR — must be the same host path SRS writes recordings to (see the srs
   # service's ./dvr-data mount) so HandleDVRComplete can read the file back.
@@ -95,7 +103,7 @@ services:
     # -js enables JetStream — required by pkg/nats/publisher.go (video.transcode
     # stream) and the transcode/worker service's durable consumer; without it
     # both fail with "nats: jetstream not enabled".
-    command: [ "-js", "-m", "8222", "-sd", "/nats-data", "-user", "guest", "-pass", "guest" ]
+    command: [ "-js", "-m", "8222", "-sd", "/nats-data", "-user", "${NATS_USER}", "-pass", "${NATS_PASSWORD}" ]
     ports:
       # Host ports shifted off the NATS defaults (4222/8222) — another
       # unrelated project's container already occupies those on this host.
@@ -191,9 +199,10 @@ services:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: "minioadmin"
-      MINIO_ROOT_PASSWORD: "minioadmin123"
-      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      # Browser uploads (PUT) and HLS playback come from the frontend origin
+      MINIO_API_CORS_ALLOW_ORIGIN: "${CORS_ALLOW_ORIGINS:-http://localhost:3000}"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -211,9 +220,16 @@ services:
     # 755, which the backend process (running as an unprivileged host user)
     # can't delete recordings from after uploading them to S3.
     entrypoint: ["/bin/sh", "-c"]
-    command: ["mkdir -p objs/dvr/live && chmod -R 777 objs/dvr && exec ./objs/srs -c conf/live.conf"]
+    # The http_hooks URLs (incl. the internal webhook secret) are rendered
+    # from srs/live.conf.tpl at startup, so the secret lives only in .env.
+    command: ["mkdir -p objs/dvr/live && chmod -R 777 objs/dvr && sed -e \"s|__SRS_HOOK_BASE_URL__|$$SRS_HOOK_BASE_URL|g\" -e \"s|__INTERNAL_WEBHOOK_SECRET__|$$INTERNAL_WEBHOOK_SECRET|g\" conf/live.conf.tpl > conf/live.conf && exec ./objs/srs -c conf/live.conf"]
+    environment:
+      INTERNAL_WEBHOOK_SECRET: "${INTERNAL_WEBHOOK_SECRET}"
+      # Where SRS reaches the backend: the host when the backend runs via
+      # `go run` (default), or http://app:8080 when the app runs in compose.
+      SRS_HOOK_BASE_URL: "${SRS_HOOK_BASE_URL:-http://host.docker.internal:8080}"
     volumes:
-      - ./srs/live.conf:/usr/local/srs/conf/live.conf:ro
+      - ./srs/live.conf.tpl:/usr/local/srs/conf/live.conf.tpl:ro
       - ./dvr-data:/usr/local/srs/objs/dvr
     extra_hosts:
       - "host.docker.internal:host-gateway"

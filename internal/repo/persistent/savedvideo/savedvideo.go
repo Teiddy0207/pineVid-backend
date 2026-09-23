@@ -100,8 +100,10 @@ func (r *Repo) IsSavedByUser(ctx context.Context, videoID, userID string) (bool,
 func (r *Repo) ListSavedVideos(ctx context.Context, userID string, limit, offset int) ([]entity.Video, int, error) {
 	countSQL, countArgs, err := r.Builder.
 		Select("COUNT(*)").
-		From("saved_videos").
-		Where(sq.Eq{"user_id": userID}).
+		From("saved_videos sv").
+		Join("videos v ON sv.video_id = v.id").
+		Where(sq.Eq{"sv.user_id": userID}).
+		Where(viewableBy(userID)).
 		ToSql()
 	if err != nil {
 		return nil, 0, fmt.Errorf("SavedVideoRepo - ListSavedVideos - countBuilder: %w", err)
@@ -118,6 +120,7 @@ func (r *Repo) ListSavedVideos(ctx context.Context, userID string, limit, offset
 		Join("videos v ON sv.video_id = v.id").
 		LeftJoin("users u ON v.user_id::text = u.id::text").
 		Where(sq.Eq{"sv.user_id": userID}).
+		Where(viewableBy(userID)).
 		OrderBy("sv.created_at DESC").
 		Limit(uint64(limit)).
 		Offset(uint64(offset)).
@@ -142,4 +145,16 @@ func (r *Repo) ListSavedVideos(ctx context.Context, userID string, limit, offset
 	}
 
 	return videos, total, nil
+}
+
+// viewableBy mirrors entity.Video.ViewableBy in SQL: a video the user saved
+// or watched earlier may since have gone private or been taken down.
+func viewableBy(userID string) sq.Sqlizer {
+	return sq.Or{
+		sq.Expr("v.user_id::text = ?", userID),
+		sq.And{
+			sq.Eq{"v.status": entity.VideoStatusComplete},
+			sq.NotEq{"v.visibility": entity.VideoVisibilityPrivate},
+		},
+	}
 }

@@ -15,16 +15,33 @@ import (
 // heartbeat before it's dropped from the "active" list (e.g. crashed/killed).
 const workerStaleAfter = 30 * time.Second
 
+// StreamKicker force-disconnects a live RTMP publisher (livestream usecase).
+type StreamKicker interface {
+	KickStream(ctx context.Context, streamKey string) error
+}
+
+// SessionManager makes an account ban take effect immediately (user usecase):
+// drop the cached ban state read by the auth middleware and revoke refresh
+// tokens so the account can't mint new access tokens.
+type SessionManager interface {
+	InvalidateBanCache(userID string)
+	RevokeSessions(ctx context.Context, userID string) error
+}
+
 type UseCase struct {
 	lsRepo    repo.LivestreamRepo
 	vRepo     repo.VideoRepo
 	uRepo     repo.UserRepo
 	wRepo     repo.WorkerRepo
 	statsRepo repo.AdminStatsRepo
+	kicker    StreamKicker
+	sessions  SessionManager
 }
 
-func New(ls repo.LivestreamRepo, v repo.VideoRepo, u repo.UserRepo, w repo.WorkerRepo, stats repo.AdminStatsRepo) *UseCase {
-	return &UseCase{lsRepo: ls, vRepo: v, uRepo: u, wRepo: w, statsRepo: stats}
+// New -. kicker and sessions may be nil (tests); the corresponding side
+// effects are then skipped.
+func New(ls repo.LivestreamRepo, v repo.VideoRepo, u repo.UserRepo, w repo.WorkerRepo, stats repo.AdminStatsRepo, kicker StreamKicker, sessions SessionManager) *UseCase {
+	return &UseCase{lsRepo: ls, vRepo: v, uRepo: u, wRepo: w, statsRepo: stats, kicker: kicker, sessions: sessions}
 }
 
 func (u *UseCase) GetDashboard(ctx context.Context) (response.SystemDashboardResponse, error) {
@@ -100,22 +117,55 @@ func (u *UseCase) RecordHeartbeat(ctx context.Context, hb entity.WorkerHeartbeat
 	return u.wRepo.UpsertHeartbeat(ctx, hb)
 }
 
+// BanStream takes a channel's stream down: it is marked banned (so on_publish
+// rejects the key from now on) and the current RTMP publisher is kicked.
 func (u *UseCase) BanStream(ctx context.Context, streamID string) error {
+	return u.setStreamBanned(ctx, streamID, true)
+}
+
+// UnbanStream lets the channel go live again.
+func (u *UseCase) UnbanStream(ctx context.Context, streamID string) error {
+	return u.setStreamBanned(ctx, streamID, false)
+}
+
+func (u *UseCase) setStreamBanned(ctx context.Context, streamID string, banned bool) error {
 	ls, err := u.lsRepo.GetByID(ctx, streamID)
 	if err != nil {
 		return err
 	}
-	ls.IsLive = false
+	ls.IsBanned = banned
+	if banned {
+		ls.IsLive = false
+	}
 	ls.UpdatedAt = time.Now().UTC()
-	return u.lsRepo.Update(ctx, &ls)
+	if err := u.lsRepo.Update(ctx, &ls); err != nil {
+		return err
+	}
+
+	if banned {
+		u.kickStream(ctx, ls.StreamKey)
+	}
+	return nil
 }
 
+func (u *UseCase) kickStream(ctx context.Context, streamKey string) {
+	if u.kicker == nil || streamKey == "" {
+		return
+	}
+	// Best-effort: the DB ban already blocks reconnects even if SRS is
+	// unreachable right now.
+	_ = u.kicker.KickStream(ctx, streamKey)
+}
+
+// BanVideo takes a video down (status = banned). It vanishes from every
+// listing and returns 404 to everyone but its owner; a later transcode
+// callback cannot revive it.
 func (u *UseCase) BanVideo(ctx context.Context, videoID string) error {
 	v, err := u.vRepo.GetByID(ctx, videoID)
 	if err != nil {
 		return err
 	}
-	v.Visibility = entity.VideoVisibilityPrivate
+	v.Status = entity.VideoStatusBanned
 	v.UpdatedAt = time.Now().UTC()
 	return u.vRepo.Update(ctx, &v)
 }
@@ -143,5 +193,26 @@ func (u *UseCase) setUserBanned(ctx context.Context, userID string, banned bool)
 	}
 	usr.IsBanned = banned
 	usr.UpdatedAt = time.Now().UTC()
-	return u.uRepo.Update(ctx, &usr)
+	if err := u.uRepo.Update(ctx, &usr); err != nil {
+		return err
+	}
+
+	if u.sessions != nil {
+		u.sessions.InvalidateBanCache(userID)
+		if banned {
+			_ = u.sessions.RevokeSessions(ctx, userID)
+		}
+	}
+
+	// A banned user who is live right now gets cut off immediately
+	// (on_publish then rejects them via OwnerBanned).
+	if banned {
+		if ls, err := u.lsRepo.GetByUserID(ctx, userID); err == nil && ls.IsLive {
+			ls.IsLive = false
+			ls.UpdatedAt = time.Now().UTC()
+			_ = u.lsRepo.Update(ctx, &ls)
+			u.kickStream(ctx, ls.StreamKey)
+		}
+	}
+	return nil
 }

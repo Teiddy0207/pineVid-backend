@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
@@ -133,6 +135,16 @@ func (u *UseCase) ResetStreamKey(ctx context.Context, userID string) (response.S
 }
 
 func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error) {
+	ls, err := u.repo.GetByStreamKey(ctx, req.StreamKey)
+	if err != nil {
+		return false, entity.ErrInvalidStreamKey
+	}
+	// Checked before the reconnect shortcut below, so a ban issued during
+	// the grace window also blocks the reconnect.
+	if ls.IsBanned || ls.OwnerBanned {
+		return false, entity.ErrStreamBanned
+	}
+
 	// A reconnect within the grace window: the stream was never actually
 	// marked offline (see UnpublishStream), so there's nothing to restore —
 	// just cancel the pending finalize and let the publish through.
@@ -144,11 +156,6 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 		return true, nil
 	}
 	u.mu.Unlock()
-
-	ls, err := u.repo.GetByStreamKey(ctx, req.StreamKey)
-	if err != nil {
-		return false, entity.ErrInvalidStreamKey
-	}
 
 	// Mark stream as live. HLSUrl is a relative path served by SRS itself
 	// (vhost hls_m3u8_file = [app]/[stream].m3u8) — the frontend prefixes
@@ -451,20 +458,34 @@ func (u *UseCase) UpdateStreamInfo(ctx context.Context, userID string, req reque
 	return mapper.ToLivestreamResponse(ls), nil
 }
 
-func (u *UseCase) SendChatMessage(ctx context.Context, streamID string, req request.SendChatMessage) (response.ChatMessageResponse, error) {
-	if req.Username == "" {
-		req.Username = "Guest"
+// maxChatMessageRunes caps a single chat line (Twitch uses 500).
+const maxChatMessageRunes = 500
+
+// SendChatMessage broadcasts a chat line. username/avatar come from the
+// authenticated account (never from the request body), so a viewer can't
+// post under someone else's name.
+func (u *UseCase) SendChatMessage(ctx context.Context, streamID, username, avatar, text string) (response.ChatMessageResponse, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return response.ChatMessageResponse{}, entity.ErrEmptyChatMessage
 	}
-	if req.Avatar == "" {
-		req.Avatar = req.Username[0:1]
+	if utf8.RuneCountInString(text) > maxChatMessageRunes {
+		return response.ChatMessageResponse{}, entity.ErrChatMessageTooLong
+	}
+	if username == "" {
+		username = "Viewer"
+	}
+	if avatar == "" {
+		r, _ := utf8.DecodeRuneInString(username)
+		avatar = strings.ToUpper(string(r))
 	}
 
 	msg := events.ChatMessage{
 		StreamID:  streamID,
 		Type:      "chat",
-		Username:  req.Username,
-		Avatar:    req.Avatar,
-		Text:      req.Text,
+		Username:  username,
+		Avatar:    avatar,
+		Text:      text,
 		CreatedAt: time.Now().Format("15:04:05"),
 	}
 
@@ -473,6 +494,17 @@ func (u *UseCase) SendChatMessage(ctx context.Context, streamID string, req requ
 	}
 
 	return mapper.ToChatMessageResponse(msg), nil
+}
+
+// KickStream force-disconnects the RTMP publisher of streamKey (admin ban).
+// SRS then fires on_unpublish, so the usual end-of-stream path (grace
+// period, DVR replay) still runs; the ban check in AuthenticateStreamKey is
+// what stops the streamer from reconnecting.
+func (u *UseCase) KickStream(ctx context.Context, streamKey string) error {
+	if u.srsClient == nil {
+		return nil
+	}
+	return u.srsClient.KickPublisher(ctx, streamKey)
 }
 
 // BroadcastHeart pushes a real-time "someone hearted this stream" event to

@@ -59,6 +59,6 @@ func (r *V1) login() server.CallHandler {
 			return nil, fmt.Errorf("nats_rpc - V1 - login: %w", err)
 		}
 
-		return response.Token{Token: token}, nil
+		return response.Token{Token: token.Token}, nil
 	}
 }

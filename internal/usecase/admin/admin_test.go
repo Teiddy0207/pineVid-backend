@@ -8,6 +8,7 @@ import (
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/evrone/go-clean-template/internal/usecase/admin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -135,7 +136,7 @@ func TestGetDashboard_IncludesChannelAndCategoryStats(t *testing.T) {
 		{Category: "Music", VideoCount: 9},
 	}, nil)
 
-	uc := admin.New(lsRepo, vRepo, uRepo, wRepo, statsRepo)
+	uc := admin.New(lsRepo, vRepo, uRepo, wRepo, statsRepo, nil, nil)
 
 	dash, err := uc.GetDashboard(context.Background())
 
@@ -150,4 +151,77 @@ func TestGetDashboard_IncludesChannelAndCategoryStats(t *testing.T) {
 	require.Len(t, dash.CategoryBreakdown, 2)
 	require.Equal(t, "Gaming", dash.CategoryBreakdown[0].Category)
 	require.Equal(t, int64(15), dash.CategoryBreakdown[0].VideoCount)
+}
+
+type fakeKicker struct{ kicked []string }
+
+func (f *fakeKicker) KickStream(_ context.Context, streamKey string) error {
+	f.kicked = append(f.kicked, streamKey)
+	return nil
+}
+
+type fakeSessions struct {
+	invalidated []string
+	revoked     []string
+}
+
+func (f *fakeSessions) InvalidateBanCache(userID string) { f.invalidated = append(f.invalidated, userID) }
+func (f *fakeSessions) RevokeSessions(_ context.Context, userID string) error {
+	f.revoked = append(f.revoked, userID)
+	return nil
+}
+
+func TestBanUser_TakesEffectImmediately(t *testing.T) {
+	lsRepo, uRepo := new(mockLivestreamRepo), new(mockUserRepo)
+	kicker, sessions := &fakeKicker{}, &fakeSessions{}
+	uc := admin.New(lsRepo, new(mockVideoRepo), uRepo, new(mockWorkerRepo), new(mockAdminStatsRepo), kicker, sessions)
+
+	uRepo.On("GetByID", mock.Anything, "u1").Return(entity.User{ID: "u1"}, nil)
+	uRepo.On("Update", mock.Anything, mock.MatchedBy(func(u *entity.User) bool { return u.IsBanned })).Return(nil)
+	lsRepo.On("GetByUserID", mock.Anything, "u1").Return(entity.Livestream{ID: "ls1", UserID: "u1", StreamKey: "sk1", IsLive: true}, nil)
+	lsRepo.On("Update", mock.Anything, mock.MatchedBy(func(ls *entity.Livestream) bool { return !ls.IsLive })).Return(nil)
+
+	require.NoError(t, uc.BanUser(context.Background(), "u1"))
+
+	assert.Equal(t, []string{"u1"}, sessions.invalidated)
+	assert.Equal(t, []string{"u1"}, sessions.revoked)
+	assert.Equal(t, []string{"sk1"}, kicker.kicked)
+}
+
+func TestUnbanUser_OnlyInvalidatesCache(t *testing.T) {
+	uRepo := new(mockUserRepo)
+	kicker, sessions := &fakeKicker{}, &fakeSessions{}
+	uc := admin.New(new(mockLivestreamRepo), new(mockVideoRepo), uRepo, new(mockWorkerRepo), new(mockAdminStatsRepo), kicker, sessions)
+
+	uRepo.On("GetByID", mock.Anything, "u1").Return(entity.User{ID: "u1", IsBanned: true}, nil)
+	uRepo.On("Update", mock.Anything, mock.MatchedBy(func(u *entity.User) bool { return !u.IsBanned })).Return(nil)
+
+	require.NoError(t, uc.UnbanUser(context.Background(), "u1"))
+
+	assert.Equal(t, []string{"u1"}, sessions.invalidated)
+	assert.Empty(t, sessions.revoked)
+	assert.Empty(t, kicker.kicked)
+}
+
+func TestBanStream_MarksBannedAndKicks(t *testing.T) {
+	lsRepo := new(mockLivestreamRepo)
+	kicker := &fakeKicker{}
+	uc := admin.New(lsRepo, new(mockVideoRepo), new(mockUserRepo), new(mockWorkerRepo), new(mockAdminStatsRepo), kicker, nil)
+
+	lsRepo.On("GetByID", mock.Anything, "ls1").Return(entity.Livestream{ID: "ls1", StreamKey: "sk1", IsLive: true}, nil)
+	lsRepo.On("Update", mock.Anything, mock.MatchedBy(func(ls *entity.Livestream) bool { return ls.IsBanned && !ls.IsLive })).Return(nil)
+
+	require.NoError(t, uc.BanStream(context.Background(), "ls1"))
+	assert.Equal(t, []string{"sk1"}, kicker.kicked)
+}
+
+func TestBanVideo_SetsBannedStatus(t *testing.T) {
+	vRepo := new(mockVideoRepo)
+	uc := admin.New(new(mockLivestreamRepo), vRepo, new(mockUserRepo), new(mockWorkerRepo), new(mockAdminStatsRepo), nil, nil)
+
+	vRepo.On("GetByID", mock.Anything, "v1").Return(entity.Video{ID: "v1", Status: entity.VideoStatusComplete, Visibility: entity.VideoVisibilityPublic}, nil)
+	vRepo.On("Update", mock.Anything, mock.MatchedBy(func(v *entity.Video) bool { return v.Status == entity.VideoStatusBanned })).Return(nil)
+
+	require.NoError(t, uc.BanVideo(context.Background(), "v1"))
+	vRepo.AssertExpectations(t)
 }

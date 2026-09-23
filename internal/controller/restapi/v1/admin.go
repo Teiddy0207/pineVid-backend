@@ -77,8 +77,31 @@ func (r *V1) banStream(ctx *fiber.Ctx) error {
 	})
 }
 
+// @Summary      Unban livestream
+// @Description  Allow a previously banned channel to go live again
+// @Tags         Admin
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Livestream ID"
+// @Success      200 {object} map[string]interface{}
+// @Failure      500 {object} response.Error
+// @Router       /v1/admin/streams/{id}/unban [post]
+func (r *V1) unbanStream(ctx *fiber.Ctx) error {
+	streamID := ctx.Params("id")
+
+	if err := r.ad.UnbanStream(ctx.UserContext(), streamID); err != nil {
+		r.l.Error(err, "restapi - v1 - unbanStream")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to unban livestream")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "livestream unbanned successfully",
+	})
+}
+
 // @Summary      Ban video
-// @Description  Remove or set video visibility to private due to terms violation
+// @Description  Take a video down for a terms violation (status = banned: hidden from all listings, 404 for everyone but the owner)
 // @Tags         Admin
 // @Accept       json
 // @Produce      json

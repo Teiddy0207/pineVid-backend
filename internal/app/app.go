@@ -15,51 +15,52 @@ import (
 	natsrpc "github.com/evrone/go-clean-template/internal/controller/nats_rpc"
 	"github.com/evrone/go-clean-template/internal/controller/restapi"
 	"github.com/evrone/go-clean-template/internal/events"
-	adminusecase "github.com/evrone/go-clean-template/internal/usecase/admin"
-	commentusecase "github.com/evrone/go-clean-template/internal/usecase/comment"
-	postusecase "github.com/evrone/go-clean-template/internal/usecase/post"
-	followusecase "github.com/evrone/go-clean-template/internal/usecase/follow"
-	historyusecase "github.com/evrone/go-clean-template/internal/usecase/history"
-	likeusecase "github.com/evrone/go-clean-template/internal/usecase/like"
-	livestreamusecase "github.com/evrone/go-clean-template/internal/usecase/livestream"
-	notifusecase "github.com/evrone/go-clean-template/internal/usecase/notification"
-	recusecase "github.com/evrone/go-clean-template/internal/usecase/recommendation"
-	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
-	subtitleusecase "github.com/evrone/go-clean-template/internal/usecase/subtitle"
-	vocabusecase "github.com/evrone/go-clean-template/internal/usecase/vocabulary"
 	persistAdminStatsRepo "github.com/evrone/go-clean-template/internal/repo/persistent/adminstats"
 	persistCommentRepo "github.com/evrone/go-clean-template/internal/repo/persistent/comment"
 	persistCommentLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/commentlike"
-	persistPostRepo "github.com/evrone/go-clean-template/internal/repo/persistent/post"
-	persistPostLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/postlike"
 	persistFollowRepo "github.com/evrone/go-clean-template/internal/repo/persistent/follow"
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
 	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
 	persistNotifRepo "github.com/evrone/go-clean-template/internal/repo/persistent/notification"
+	persistPostRepo "github.com/evrone/go-clean-template/internal/repo/persistent/post"
+	persistPostLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/postlike"
 	persistRecRepo "github.com/evrone/go-clean-template/internal/repo/persistent/recommendation"
+	persistRefreshTokenRepo "github.com/evrone/go-clean-template/internal/repo/persistent/refreshtoken"
+	persistSavedVideoRepo "github.com/evrone/go-clean-template/internal/repo/persistent/savedvideo"
 	persistSubtitleRepo "github.com/evrone/go-clean-template/internal/repo/persistent/subtitle"
-	persistVocabRepo "github.com/evrone/go-clean-template/internal/repo/persistent/vocabulary"
-	persistWorkerRepo "github.com/evrone/go-clean-template/internal/repo/persistent/worker"
 	persistUserRepo "github.com/evrone/go-clean-template/internal/repo/persistent/user"
 	persistUserPrefRepo "github.com/evrone/go-clean-template/internal/repo/persistent/userpreference"
-	userprefusecase "github.com/evrone/go-clean-template/internal/usecase/userpreference"
-	persistSavedVideoRepo "github.com/evrone/go-clean-template/internal/repo/persistent/savedvideo"
-	savedvideousecase "github.com/evrone/go-clean-template/internal/usecase/savedvideo"
 	persistVideoRepo "github.com/evrone/go-clean-template/internal/repo/persistent/video"
 	persistViewRepo "github.com/evrone/go-clean-template/internal/repo/persistent/view"
-	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
-	redispkg "github.com/evrone/go-clean-template/pkg/redis"
-	pkgsrs "github.com/evrone/go-clean-template/pkg/srs"
+	persistVocabRepo "github.com/evrone/go-clean-template/internal/repo/persistent/vocabulary"
+	persistWorkerRepo "github.com/evrone/go-clean-template/internal/repo/persistent/worker"
 	"github.com/evrone/go-clean-template/internal/usecase"
+	adminusecase "github.com/evrone/go-clean-template/internal/usecase/admin"
+	commentusecase "github.com/evrone/go-clean-template/internal/usecase/comment"
+	followusecase "github.com/evrone/go-clean-template/internal/usecase/follow"
+	historyusecase "github.com/evrone/go-clean-template/internal/usecase/history"
+	likeusecase "github.com/evrone/go-clean-template/internal/usecase/like"
+	livestreamusecase "github.com/evrone/go-clean-template/internal/usecase/livestream"
+	notifusecase "github.com/evrone/go-clean-template/internal/usecase/notification"
+	postusecase "github.com/evrone/go-clean-template/internal/usecase/post"
+	recusecase "github.com/evrone/go-clean-template/internal/usecase/recommendation"
+	savedvideousecase "github.com/evrone/go-clean-template/internal/usecase/savedvideo"
+	subtitleusecase "github.com/evrone/go-clean-template/internal/usecase/subtitle"
 	"github.com/evrone/go-clean-template/internal/usecase/user"
+	userprefusecase "github.com/evrone/go-clean-template/internal/usecase/userpreference"
+	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
+	vocabusecase "github.com/evrone/go-clean-template/internal/usecase/vocabulary"
 	"github.com/evrone/go-clean-template/pkg/grpcserver"
 	"github.com/evrone/go-clean-template/pkg/httpserver"
-	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/evrone/go-clean-template/pkg/jwt"
 	"github.com/evrone/go-clean-template/pkg/logger"
+	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
+	"github.com/evrone/go-clean-template/pkg/nats"
 	natsRPCServer "github.com/evrone/go-clean-template/pkg/nats/nats_rpc/server"
 	"github.com/evrone/go-clean-template/pkg/postgres"
+	redispkg "github.com/evrone/go-clean-template/pkg/redis"
+	pkgsrs "github.com/evrone/go-clean-template/pkg/srs"
 	"github.com/evrone/go-clean-template/pkg/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	pbgrpc "google.golang.org/grpc"
@@ -105,6 +106,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	subtitleRepo := persistSubtitleRepo.New(pg)
 	userPrefRepo := persistUserPrefRepo.New(pg)
 	savedVideoRepo := persistSavedVideoRepo.New(pg)
+	refreshTokenRepo := persistRefreshTokenRepo.New(pg)
 
 	redisClient, err := redispkg.New(cfg.Redis.URL, "", 0)
 	if err != nil {
@@ -126,7 +128,8 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	livestreamUc.StartReconciliationLoop(context.Background(), cfg.SRS.ReconcileInterval)
 	workerRepo := persistWorkerRepo.New(pg)
 	adminStatsRepo := persistAdminStatsRepo.New(pg)
-	adminUc := adminusecase.New(livestreamRepo, videoRepo, userRepo, workerRepo, adminStatsRepo)
+	userUc := user.New(userRepo, refreshTokenRepo, jwtManager, cfg.JWT.RefreshTokenExpiry)
+	adminUc := adminusecase.New(livestreamRepo, videoRepo, userRepo, workerRepo, adminStatsRepo, livestreamUc, userUc)
 	likeUc := likeusecase.New(likeRepo, natsPub, livestreamUc)
 	commentUc := commentusecase.New(commentRepo, commentLikeRepo, natsPub)
 	postUc := postusecase.New(postRepo, postLikeRepo, notifUc)
@@ -140,7 +143,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	savedVideoUc := savedvideousecase.New(savedVideoRepo)
 
 	return useCases{
-		user:           user.New(userRepo, jwtManager),
+		user:           userUc,
 		video:          videoUc,
 		livestream:     livestreamUc,
 		admin:          adminUc,
@@ -190,7 +193,7 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 	// every long-lived SSE stream (chat, hearts, notifications, transcode
 	// events) silently stopped delivering anything sent more than ~5s after
 	// the client connected, even though the connection looked "open".
-	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode), httpserver.WriteTimeout(0))
+	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode), httpserver.WriteTimeout(0), httpserver.TrustedProxies(cfg.HTTP.TrustedProxies))
 	restapi.NewRouter(httpServer.App, cfg, uc.user, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.post, uc.recommendation, uc.history, uc.follow, uc.notification, uc.vocabulary, uc.subtitle, uc.userPreference, uc.savedVideo, videoEventHub, chatHub, jwtManager, l)
 
 	return servers{
