@@ -174,19 +174,26 @@ func TestGetPersonalizedFeed_FreshUploadSurfacesThenDecays(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	rank := func(newAge time.Duration) string {
+	rank := func(newAge time.Duration, trained bool) string {
 		vRepo := new(mockVideoRepo)
 		vRepo.On("List", mock.Anything, mock.Anything).Return([]entity.Video{
 			{ID: "old-popular", Category: "Music", Views: 20000, CreatedAt: now.Add(-30 * 24 * time.Hour)},
 			{ID: "new-upload", Category: "Music", Views: 0, CreatedAt: now.Add(-newAge)},
 		}, 2, nil)
 		uc := &UseCase{videoRepo: vRepo, trainedIsEmpty: true}
+		if trained {
+			// Model trained on other users' interactions; this viewer has no
+			// vector of their own (the common case for a new/anonymous viewer).
+			uc = &UseCase{videoRepo: vRepo, factors: 1, userVec: map[string][]float64{"someone-else": {1}}, videoVec: map[string][]float64{}}
+		}
 
 		page, err := uc.GetPersonalizedFeed(context.Background(), "", 1, 10)
 		require.NoError(t, err)
 		return page.Data[0].Video.ID
 	}
 
-	require.Equal(t, "new-upload", rank(time.Minute))
-	require.Equal(t, "old-popular", rank(4*24*time.Hour))
+	for _, trained := range []bool{false, true} {
+		require.Equal(t, "new-upload", rank(time.Minute, trained), "trained=%v", trained)
+		require.Equal(t, "old-popular", rank(4*24*time.Hour, trained), "trained=%v", trained)
+	}
 }

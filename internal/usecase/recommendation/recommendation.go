@@ -284,7 +284,7 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 
 	recs := make([]entity.RecommendedVideo, 0, len(allVideos))
 	for _, v := range allVideos {
-		score := float64(v.Views) * 0.1 // Base baseline, always fresh
+		score := baseScore(v, now) // popularity + freshness, always computed fresh
 		if hasUser {
 			if videoFactors, found := u.videoVec[v.ID]; found {
 				pred := 0.0
