@@ -52,6 +52,31 @@ func New(r *persistRecRepo.Repo, vr repo.VideoRepo, pr repo.UserPreferenceRepo) 
 // non-preferred one regardless of view count.
 const categoryBoost = 1_000_000.0
 
+const (
+	// candidatePoolSize is how many of the newest public videos are ranked.
+	candidatePoolSize = 200
+	// freshnessBoost is the extra score of a video uploaded just now; it
+	// halves every freshnessHalfLife. 12 ≈ log1p(160k views): a brand-new
+	// video can reach the top of the feed for its first day or so, then
+	// has to hold its place on popularity/model score like everything else.
+	freshnessBoost    = 12.0
+	freshnessHalfLife = 24 * time.Hour
+)
+
+// baseScore is the part of a video's rank every viewer shares: popularity on
+// a log scale (so a few viral — or bot-inflated — videos can't bury
+// everything else) plus a freshness boost that decays with age (so a new
+// upload with 0 views still gets seen instead of sinking to the last page).
+func baseScore(v entity.Video, now time.Time) float64 {
+	score := math.Log1p(math.Max(float64(v.Views), 0))
+	if !v.CreatedAt.IsZero() {
+		if age := now.Sub(v.CreatedAt); age >= 0 {
+			score += freshnessBoost * math.Exp2(-age.Hours()/freshnessHalfLife.Hours())
+		}
+	}
+	return score
+}
+
 // StartBackgroundTraining trains the model once immediately (so the cache is
 // warm before the server starts taking traffic), then keeps retraining on a
 // fixed interval in the background for as long as ctx is alive. No HTTP
@@ -214,7 +239,7 @@ func allFinite(matrix [][]float64) bool {
 func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, limit int) (response.PageResponse[response.RecommendedVideoItem], error) {
 	status := entity.VideoStatusComplete
 	visibility := entity.VideoVisibilityPublic
-	allVideos, totalVideos, err := u.videoRepo.List(ctx, repo.VideoFilter{Status: &status, Visibility: &visibility, Limit: 50})
+	allVideos, totalVideos, err := u.videoRepo.List(ctx, repo.VideoFilter{Status: &status, Visibility: &visibility, Limit: candidatePoolSize})
 	if err != nil {
 		return response.PageResponse[response.RecommendedVideoItem]{}, fmt.Errorf("RecommendationUseCase - List: %w", err)
 	}
@@ -231,6 +256,8 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 		}
 	}
 
+	now := time.Now()
+
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -241,7 +268,7 @@ func (u *UseCase) GetPersonalizedFeed(ctx context.Context, userID string, page, 
 		// before the model has ever trained.
 		recs := make([]entity.RecommendedVideo, len(allVideos))
 		for i, v := range allVideos {
-			score := 1.0
+			score := baseScore(v, now)
 			if preferredCategories[v.Category] {
 				score += categoryBoost
 			}

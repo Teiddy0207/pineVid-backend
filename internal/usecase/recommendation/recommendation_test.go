@@ -3,6 +3,7 @@ package recommendation
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/repo"
@@ -155,7 +156,7 @@ func TestGetPersonalizedFeed_TrainedUser_ModelScoreOverridesPreference(t *testin
 		trainedIsEmpty: false,
 		userVec:        map[string][]float64{"user-1": {1.0, 1.0}},
 		videoVec: map[string][]float64{
-			"gaming-low-views": {0.01, 0.01},  // low dot-product
+			"gaming-low-views": {0.01, 0.01}, // low dot-product
 			"music-high-views": {10.0, 10.0}, // high dot-product
 		},
 	}
@@ -164,4 +165,28 @@ func TestGetPersonalizedFeed_TrainedUser_ModelScoreOverridesPreference(t *testin
 
 	require.NoError(t, err)
 	require.Equal(t, "music-high-views", page.Data[0].Video.ID)
+}
+
+// A just-uploaded video with 0 views must not sink below every popular one
+// (it used to land on the last page of the feed); after a few days the
+// freshness boost has decayed and popularity decides again.
+func TestGetPersonalizedFeed_FreshUploadSurfacesThenDecays(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	rank := func(newAge time.Duration) string {
+		vRepo := new(mockVideoRepo)
+		vRepo.On("List", mock.Anything, mock.Anything).Return([]entity.Video{
+			{ID: "old-popular", Category: "Music", Views: 20000, CreatedAt: now.Add(-30 * 24 * time.Hour)},
+			{ID: "new-upload", Category: "Music", Views: 0, CreatedAt: now.Add(-newAge)},
+		}, 2, nil)
+		uc := &UseCase{videoRepo: vRepo, trainedIsEmpty: true}
+
+		page, err := uc.GetPersonalizedFeed(context.Background(), "", 1, 10)
+		require.NoError(t, err)
+		return page.Data[0].Video.ID
+	}
+
+	require.Equal(t, "new-upload", rank(time.Minute))
+	require.Equal(t, "old-popular", rank(4*24*time.Hour))
 }
