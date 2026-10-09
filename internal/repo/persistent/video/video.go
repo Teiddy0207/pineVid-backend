@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/evrone/go-clean-template/internal/entity"
@@ -18,6 +19,27 @@ type Repo struct {
 
 func New(pg *postgres.Postgres) repo.VideoRepo {
 	return &Repo{pg}
+}
+
+// videoColumns is the select list every read shares; scanVideo scans it in
+// the same order.
+var videoColumns = []string{
+	"v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')",
+	"v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url",
+	"v.thumbnail_url", "v.duration", "v.is_reel", "v.views", "v.created_at", "v.updated_at",
+	"COALESCE(v.current_job_id, '')", "v.queued_at", "v.transcode_started_at", "v.transcode_completed_at",
+}
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanVideo(row scanner) (entity.Video, error) {
+	var v entity.Video
+	err := row.Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status,
+		&v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.IsReel, &v.Views, &v.CreatedAt,
+		&v.UpdatedAt, &v.CurrentJobID, &v.QueuedAt, &v.TranscodeStartedAt, &v.TranscodeCompletedAt)
+	return v, err
 }
 
 func (r *Repo) Store(ctx context.Context, v *entity.Video) error {
@@ -40,7 +62,7 @@ func (r *Repo) Store(ctx context.Context, v *entity.Video) error {
 
 func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 	sql, args, err := r.Builder.
-		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.is_reel", "v.views", "v.created_at", "v.updated_at").
+		Select(videoColumns...).
 		From("videos v").
 		LeftJoin("users u ON v.user_id::text = u.id::text").
 		Where(sq.Eq{"v.id": id}).
@@ -49,9 +71,7 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 		return entity.Video{}, fmt.Errorf("VideoRepo - GetByID - r.Builder: %w", err)
 	}
 
-	var v entity.Video
-	err = r.Pool.QueryRow(ctx, sql, args...).
-		Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.IsReel, &v.Views, &v.CreatedAt, &v.UpdatedAt)
+	v, err := scanVideo(r.Pool.QueryRow(ctx, sql, args...))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Video{}, entity.ErrVideoNotFound
@@ -73,7 +93,7 @@ func (r *Repo) GetByIDs(ctx context.Context, ids []string) ([]entity.Video, erro
 	}
 
 	sql, args, err := r.Builder.
-		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.is_reel", "v.views", "v.created_at", "v.updated_at").
+		Select(videoColumns...).
 		From("videos v").
 		LeftJoin("users u ON v.user_id::text = u.id::text").
 		Where(sq.Eq{"v.id": ids}).
@@ -92,8 +112,8 @@ func (r *Repo) GetByIDs(ctx context.Context, ids []string) ([]entity.Video, erro
 
 	videos := make([]entity.Video, 0, len(ids))
 	for rows.Next() {
-		var v entity.Video
-		if err := rows.Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.IsReel, &v.Views, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		v, err := scanVideo(rows)
+		if err != nil {
 			return nil, fmt.Errorf("VideoRepo - GetByIDs - rows.Scan: %w", err)
 		}
 		videos = append(videos, v)
@@ -142,7 +162,7 @@ func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Vide
 	}
 
 	dataBuilder := r.Builder.
-		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.is_reel", "v.views", "v.created_at", "v.updated_at").
+		Select(videoColumns...).
 		From("videos v").
 		LeftJoin("users u ON v.user_id::text = u.id::text").
 		OrderBy("v.created_at DESC").
@@ -187,8 +207,7 @@ func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Vide
 
 	videos := make([]entity.Video, 0, filter.Limit)
 	for rows.Next() {
-		var v entity.Video
-		err = rows.Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.IsReel, &v.Views, &v.CreatedAt, &v.UpdatedAt)
+		v, err := scanVideo(rows)
 		if err != nil {
 			return nil, 0, fmt.Errorf("VideoRepo - List - rows.Scan: %w", err)
 		}
@@ -198,18 +217,19 @@ func (r *Repo) List(ctx context.Context, filter repo.VideoFilter) ([]entity.Vide
 	return videos, total, nil
 }
 
+// Update saves the owner-editable fields. Status, HLS URL and view count are
+// deliberately left out: they are written only by MarkQueued,
+// ApplyTranscodeEvent, SetStatus and the view-sync worker, so an edit racing
+// a transcode callback or a view sync can't write back a stale value.
 func (r *Repo) Update(ctx context.Context, v *entity.Video) error {
 	sql, args, err := r.Builder.
 		Update("videos").
 		Set("title", v.Title).
 		Set("description", v.Description).
 		Set("category", v.Category).
-		Set("status", v.Status).
 		Set("visibility", v.Visibility).
-		Set("hls_url", v.HLSUrl).
 		Set("thumbnail_url", v.ThumbnailUrl).
 		Set("duration", v.Duration).
-		Set("views", v.Views).
 		Set("updated_at", v.UpdatedAt).
 		Where(sq.Eq{"id": v.ID}).
 		ToSql()
@@ -223,6 +243,166 @@ func (r *Repo) Update(ctx context.Context, v *entity.Video) error {
 	}
 
 	return nil
+}
+
+// SetStatus force-sets a video's status (admin takedown).
+func (r *Repo) SetStatus(ctx context.Context, id string, status entity.VideoStatus, at time.Time) error {
+	sql, args, err := r.Builder.
+		Update("videos").
+		Set("status", status).
+		Set("updated_at", at).
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("VideoRepo - SetStatus - r.Builder: %w", err)
+	}
+
+	if _, err := r.Pool.Exec(ctx, sql, args...); err != nil {
+		return fmt.Errorf("VideoRepo - SetStatus - Exec: %w", err)
+	}
+
+	return nil
+}
+
+// MarkQueued moves a video from `from` to processing and makes jobID its
+// current transcode job, resetting the job timestamps. It reports false
+// (changing nothing) if the video was no longer in `from` — so two
+// concurrent confirms can't enqueue two jobs.
+func (r *Repo) MarkQueued(ctx context.Context, id, jobID string, from entity.VideoStatus, at time.Time) (bool, error) {
+	sql, args, err := r.Builder.
+		Update("videos").
+		Set("status", entity.VideoStatusProcessing).
+		Set("current_job_id", jobID).
+		Set("queued_at", at).
+		Set("transcode_started_at", nil).
+		Set("transcode_completed_at", nil).
+		Set("updated_at", at).
+		Where(sq.Eq{"id": id, "status": from}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("VideoRepo - MarkQueued - r.Builder: %w", err)
+	}
+
+	tag, err := r.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return false, fmt.Errorf("VideoRepo - MarkQueued - Exec: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+// RevertQueued undoes MarkQueued when the job could not be published, as long
+// as the job never started.
+func (r *Repo) RevertQueued(ctx context.Context, id, jobID string, to entity.VideoStatus, at time.Time) error {
+	sql, args, err := r.Builder.
+		Update("videos").
+		Set("status", to).
+		Set("updated_at", at).
+		Where(sq.Eq{"id": id, "current_job_id": jobID, "status": entity.VideoStatusProcessing}).
+		Where("transcode_started_at IS NULL").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("VideoRepo - RevertQueued - r.Builder: %w", err)
+	}
+
+	if _, err := r.Pool.Exec(ctx, sql, args...); err != nil {
+		return fmt.Errorf("VideoRepo - RevertQueued - Exec: %w", err)
+	}
+
+	return nil
+}
+
+// ApplyTranscodeEvent applies one transcode event exactly once
+// (docs/message-contract.md §4.3). In a single transaction it records the
+// idempotency key — a key seen before makes the event a no-op — then locks
+// the video row, checks the one-way state machine and applies the change.
+func (r *Repo) ApplyTranscodeEvent(ctx context.Context, ev entity.TranscodeEvent, at time.Time) (entity.TranscodeEventResult, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - Begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+
+	insSQL, insArgs, err := r.Builder.
+		Insert("processed_webhooks").
+		Columns("idempotency_key", "job_id", "video_id", "status", "outcome", "processed_at").
+		Values(ev.IdempotencyKey, ev.JobID, ev.VideoID, ev.Status, "received", at).
+		Suffix("ON CONFLICT (idempotency_key) DO NOTHING").
+		ToSql()
+	if err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - insert ToSql: %w", err)
+	}
+
+	tag, err := tx.Exec(ctx, insSQL, insArgs...)
+	if err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - insert Exec: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return entity.TranscodeEventResult{Reason: entity.TranscodeSkipDuplicate}, nil
+	}
+
+	selSQL, selArgs, err := r.Builder.
+		Select(videoColumns...).
+		From("videos v").
+		LeftJoin("users u ON v.user_id::text = u.id::text").
+		Where(sq.Eq{"v.id": ev.VideoID}).
+		Suffix("FOR UPDATE OF v").
+		ToSql()
+	if err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - select ToSql: %w", err)
+	}
+
+	before, err := scanVideo(tx.QueryRow(ctx, selSQL, selArgs...))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return entity.TranscodeEventResult{}, entity.ErrVideoNotFound
+		}
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - select: %w", err)
+	}
+
+	apply, reason := entity.DecideTranscodeTransition(before, ev)
+	outcome := reason
+	if apply {
+		outcome = "applied"
+
+		upd := r.Builder.Update("videos").Set("updated_at", at).Where(sq.Eq{"id": before.ID})
+		switch ev.Status {
+		case entity.TranscodeEventProcessing:
+			upd = upd.Set("transcode_started_at", at)
+		case entity.TranscodeEventCompleted:
+			upd = upd.Set("status", entity.VideoStatusComplete).
+				Set("hls_url", ev.HLSMasterURL).
+				Set("transcode_completed_at", at)
+		case entity.TranscodeEventFailed:
+			upd = upd.Set("status", entity.VideoStatusFailed)
+		}
+
+		updSQL, updArgs, err := upd.ToSql()
+		if err != nil {
+			return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - update ToSql: %w", err)
+		}
+		if _, err := tx.Exec(ctx, updSQL, updArgs...); err != nil {
+			return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - update Exec: %w", err)
+		}
+	}
+
+	outSQL, outArgs, err := r.Builder.
+		Update("processed_webhooks").
+		Set("outcome", outcome).
+		Where(sq.Eq{"idempotency_key": ev.IdempotencyKey}).
+		ToSql()
+	if err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - outcome ToSql: %w", err)
+	}
+	if _, err := tx.Exec(ctx, outSQL, outArgs...); err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - outcome Exec: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoRepo - ApplyTranscodeEvent - Commit: %w", err)
+	}
+
+	return entity.TranscodeEventResult{Applied: apply, Reason: reason, Before: before}, nil
 }
 
 func (r *Repo) Delete(ctx context.Context, id string) error {

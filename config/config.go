@@ -11,22 +11,26 @@ import (
 type (
 	// Config -.
 	Config struct {
-		App      app
-		HTTP     http
-		Log      log
-		PG       pg
-		GRPC     grpc
-		RMQ      rmq
-		NATS     nats
-		JWT      jwt
-		Redis    redis
-		Metrics  metrics
-		Swagger  swagger
-		Tracing  tracing
-		Minio    minio
-		DVR      dvr
-		SRS      srs
-		Security security
+		App       app
+		HTTP      http
+		Log       log
+		PG        pg
+		GRPC      grpc
+		RMQ       rmq
+		NATS      nats
+		JWT       jwt
+		Redis     redis
+		Metrics   metrics
+		Swagger   swagger
+		Tracing   tracing
+		Minio     minio
+		DVR       dvr
+		SRS       srs
+		Security  security
+		Transcode     transcode
+		Benchmark     benchmark
+		ViewCounter   viewCounter
+		TranscodeSync transcodeSync
 	}
 
 	// App -.
@@ -115,6 +119,18 @@ type (
 		SecretKey string `env:"MINIO_SECRET_KEY" envDefault:"minioadmin123"`
 		UseSSL    bool   `env:"MINIO_USE_SSL" envDefault:"false"`
 		RawBucket string `env:"MINIO_RAW_BUCKET" envDefault:"raw-videos"`
+		// PublicBucket holds user-facing images (avatars, thumbnails, post
+		// images). It must allow anonymous GET, unlike RawBucket.
+		PublicBucket string `env:"MINIO_PUBLIC_BUCKET" envDefault:"public-assets"`
+		// PublicURL is the MinIO address the BROWSER uploads to (the upload URL
+		// handed out by POST /studio/upload-url). Endpoint above is the address
+		// the backend itself uses, e.g. minio:9000 inside docker compose.
+		PublicURL string `env:"MINIO_PUBLIC_URL" envDefault:"http://localhost:9000"`
+		// PresignUploads hands the browser a signed, expiring PUT URL instead of
+		// the bare object URL. Required whenever MinIO is reachable from the
+		// internet (the bucket then stays private); the default keeps the dev
+		// stack's anonymous-upload behaviour.
+		PresignUploads bool `env:"MINIO_PRESIGN_UPLOADS" envDefault:"false"`
 	}
 
 	// DVR -. Local filesystem path where SRS writes livestream recordings
@@ -133,13 +149,52 @@ type (
 
 	// Security -.
 	security struct {
-		// InternalWebhookSecret authenticates service-to-service webhooks
-		// (transcode callback/heartbeat, SRS http_hooks). Must match the
+		// InternalWebhookSecret authenticates service-to-service webhooks:
+		// it is the HMAC key of the signed transcode webhook and the shared
+		// token of the worker heartbeat / SRS http_hooks. Must match the
 		// transcode worker's INTERNAL_WEBHOOK_SECRET and the ?secret= in the
 		// SRS hook URLs.
 		InternalWebhookSecret string `env:"INTERNAL_WEBHOOK_SECRET,required"`
 		// RateLimitEnabled can be turned off for load tests (bot/).
 		RateLimitEnabled bool `env:"RATE_LIMIT_ENABLED" envDefault:"true"`
+	}
+
+	// Transcode -. Renditions requested in every transcode job
+	// (docs/message-contract.md §2.1).
+	transcode struct {
+		Renditions []string `env:"TRANSCODE_RENDITIONS" envSeparator:"," envDefault:"720p,480p"`
+	}
+
+	// Benchmark — lifts rate limits that would block load tests.
+	benchmark struct {
+		// Mode disables the per-IP hourly view cap and the 10-second ticket
+		// wait so every request from a single k6 machine is counted.
+		Mode bool `env:"BENCHMARK_MODE" envDefault:"false"`
+	}
+
+	// ViewCounter selects how an accepted view is counted. Only the control
+	// variant of the Redis-batch vs direct-DB experiment should change it.
+	viewCounter struct {
+		// Mode: "redis" (default) = INCR in Redis, flushed in batches by the
+		// view-sync worker; "direct_db" = UPDATE videos SET views = views + 1
+		// on every accepted view.
+		Mode string `env:"VIEW_COUNTER_MODE" envDefault:"redis"`
+	}
+
+	// TranscodeSync switches from the async NATS queue to a blocking
+	// synchronous FFmpeg call in the same process. Only for the comparison
+	// experiment required by the thesis (GĐ2).
+	transcodeSync struct {
+		// Mode: "async" (default) = NATS JetStream; "sync" = inline FFmpeg.
+		Mode string `env:"TRANSCODE_MODE" envDefault:"async"`
+		// FFmpegPath is the FFmpeg binary used in sync mode.
+		FFmpegPath string `env:"FFMPEG_PATH" envDefault:"ffmpeg"`
+		// FFprobePath is the FFprobe binary used in sync mode.
+		FFprobePath string `env:"FFPROBE_PATH" envDefault:"ffprobe"`
+		// TempDir is the working directory for sync transcodes.
+		TempDir string `env:"TEMP_DIR" envDefault:"/tmp/transcode"`
+		// MinioHLSBucket is the bucket where sync mode uploads HLS output.
+		MinioHLSBucket string `env:"MINIO_HLS_BUCKET" envDefault:"hls-streams"`
 	}
 )
 

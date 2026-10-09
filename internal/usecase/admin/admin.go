@@ -161,13 +161,10 @@ func (u *UseCase) kickStream(ctx context.Context, streamKey string) {
 // listing and returns 404 to everyone but its owner; a later transcode
 // callback cannot revive it.
 func (u *UseCase) BanVideo(ctx context.Context, videoID string) error {
-	v, err := u.vRepo.GetByID(ctx, videoID)
-	if err != nil {
+	if _, err := u.vRepo.GetByID(ctx, videoID); err != nil {
 		return err
 	}
-	v.Status = entity.VideoStatusBanned
-	v.UpdatedAt = time.Now().UTC()
-	return u.vRepo.Update(ctx, &v)
+	return u.vRepo.SetStatus(ctx, videoID, entity.VideoStatusBanned, time.Now().UTC())
 }
 
 func (u *UseCase) ListUsers(ctx context.Context, page, limit int) (response.PageResponse[response.UserResponse], error) {

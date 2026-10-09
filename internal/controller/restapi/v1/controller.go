@@ -26,6 +26,7 @@ type V1 struct {
 	sv      usecase.SavedVideo
 	hub     *events.Hub
 	chatHub *events.ChatHub
+	viewHub *events.ViewHub
 	l       logger.Interface
 	v       *validator.Validate
 }

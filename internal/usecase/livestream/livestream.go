@@ -18,8 +18,8 @@ import (
 	"github.com/evrone/go-clean-template/internal/mapper"
 	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/evrone/go-clean-template/internal/usecase"
+	"github.com/evrone/go-clean-template/internal/usecase/transcodejob"
 	pkgminio "github.com/evrone/go-clean-template/pkg/minio"
-	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/evrone/go-clean-template/pkg/srs"
 	"github.com/google/uuid"
 )
@@ -41,7 +41,7 @@ type UseCase struct {
 	chatHub       *events.ChatHub
 	notifUc       usecase.Notification
 	minioClient   *pkgminio.Client
-	natsPublisher *nats.Publisher
+	jobs          *transcodejob.Enqueuer
 	srsClient     *srs.Client
 	rawBucket     string
 	dvrLocalDir   string
@@ -53,12 +53,12 @@ type UseCase struct {
 
 func New(
 	r repo.LivestreamRepo, vr repo.VideoRepo, followRepo repo.FollowRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
-	minioClient *pkgminio.Client, natsPublisher *nats.Publisher, srsClient *srs.Client, rawBucket, dvrLocalDir string,
+	minioClient *pkgminio.Client, jobs *transcodejob.Enqueuer, srsClient *srs.Client, rawBucket, dvrLocalDir string,
 	graceDuration time.Duration,
 ) *UseCase {
 	return &UseCase{
 		repo: r, videoRepo: vr, followRepo: followRepo, chatHub: chatHub, notifUc: notifUc,
-		minioClient: minioClient, natsPublisher: natsPublisher, srsClient: srsClient,
+		minioClient: minioClient, jobs: jobs, srsClient: srsClient,
 		rawBucket: rawBucket, dvrLocalDir: dvrLocalDir,
 		graceDuration: graceDuration,
 		pending:       make(map[string]*pendingEnd),
@@ -294,12 +294,12 @@ func (u *UseCase) HandleDVRComplete(ctx context.Context, streamKey string) error
 }
 
 // processDVR uploads a finished DVR recording to the raw-videos S3 bucket,
-// creates a private draft "replay" video row, and publishes a NATS transcode
-// job — reusing the exact same pipeline (and existing /v1/transcode/callback
+// creates a private draft "replay" video row, and queues a transcode job —
+// reusing the exact same pipeline (and /internal/webhooks/transcode
 // completion webhook) a manual upload goes through, rather than fabricating a
 // "complete" video that points at a file nobody produced.
 func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPath string) error {
-	if u.minioClient == nil || u.natsPublisher == nil || u.videoRepo == nil || u.dvrLocalDir == "" {
+	if u.minioClient == nil || u.jobs == nil || u.videoRepo == nil || u.dvrLocalDir == "" {
 		return errors.New("processDVR: DVR pipeline not configured")
 	}
 
@@ -324,7 +324,7 @@ func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPat
 		Title:       fmt.Sprintf("[Replay] %s", ls.Title),
 		Description: fmt.Sprintf("Bản ghi hình phát trực tiếp ngày %s", now.Format("02/01/2006 15:04")),
 		Category:    ls.Category,
-		Status:      entity.VideoStatusProcessing,
+		Status:      entity.VideoStatusPending,
 		Visibility:  entity.VideoVisibilityPrivate, // streamer reviews & publishes from Studio
 		RawS3Key:    rawS3Key,
 		Duration:    dvrDuration(ls.StartedAt, now),
@@ -336,7 +336,12 @@ func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPat
 		return fmt.Errorf("LivestreamUseCase - processDVR - Store: %w", err)
 	}
 
-	_ = u.natsPublisher.PublishTranscodeJob(videoID, rawS3Key, ls.UserID)
+	// If the queue is down, park the replay as failed so the streamer can
+	// retry it from Studio instead of it sitting in "pending" forever.
+	if _, _, err := u.jobs.Enqueue(ctx, videoID, rawS3Key, entity.VideoStatusPending); err != nil {
+		_ = u.videoRepo.SetStatus(ctx, videoID, entity.VideoStatusFailed, time.Now().UTC())
+		return fmt.Errorf("LivestreamUseCase - processDVR - Enqueue: %w", err)
+	}
 
 	return nil
 }

@@ -28,6 +28,7 @@ type (
 	// Video -.
 	Video interface {
 		CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error)
+		CreateImageUpload(ctx context.Context, userID string, req request.CreateImageUpload) (response.ImageUploadResponse, error)
 		ConfirmUpload(ctx context.Context, userID string, req request.ConfirmUpload) (response.VideoResponse, error)
 		GetByID(ctx context.Context, id, userID string) (response.VideoResponse, error)
 		EnsureViewable(ctx context.Context, videoID, userID string) error
@@ -40,8 +41,10 @@ type (
 		UpdateThumbnail(ctx context.Context, userID, videoID string, req request.UpdateThumbnail) (response.VideoResponse, error)
 		DeleteVideo(ctx context.Context, userID, videoID string) error
 		RetryTranscode(ctx context.Context, userID, videoID string) (response.VideoResponse, error)
-		HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) (string, error)
-		RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error)
+		HandleTranscodeEvent(ctx context.Context, ev entity.TranscodeEvent) (entity.TranscodeEventResult, error)
+		StartViewSession(ctx context.Context, videoID, userID string) (string, error)
+		RecordView(ctx context.Context, videoID, ticket, userID, clientIP, userAgent string) (bool, int64, error)
+		CurrentViews(ctx context.Context, videoID, userID string) (int64, error)
 	}
 
 	// Post -.

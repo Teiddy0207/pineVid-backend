@@ -36,6 +36,10 @@ type (
 		GetByIDs(ctx context.Context, ids []string) ([]entity.Video, error)
 		List(ctx context.Context, filter VideoFilter) ([]entity.Video, int, error)
 		Update(ctx context.Context, video *entity.Video) error
+		SetStatus(ctx context.Context, id string, status entity.VideoStatus, at time.Time) error
+		MarkQueued(ctx context.Context, id, jobID string, from entity.VideoStatus, at time.Time) (bool, error)
+		RevertQueued(ctx context.Context, id, jobID string, to entity.VideoStatus, at time.Time) error
+		ApplyTranscodeEvent(ctx context.Context, ev entity.TranscodeEvent, at time.Time) (entity.TranscodeEventResult, error)
 		Delete(ctx context.Context, id string) error
 	}
 

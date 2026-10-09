@@ -8,9 +8,16 @@ import (
 var (
 	ErrVideoNotFound          = errors.New("video not found")
 	ErrUnsupportedVideoFormat = errors.New("unsupported video format: only .mp4, .mov, .mkv are allowed")
+	ErrUnsupportedImageFormat = errors.New("unsupported image format: only .jpg, .jpeg, .png, .webp, .gif are allowed")
 	ErrVideoForbidden         = errors.New("you do not have permission to modify this video")
 	ErrVideoNotFailed         = errors.New("video transcode has not failed, nothing to retry")
+	ErrViewTicketInvalid      = errors.New("view ticket is invalid, expired or already used")
+	ErrViewTicketTooEarly     = errors.New("minimum watch time not reached yet")
 )
+
+// MinWatchForView is how long a viewer must watch before a view counts
+// (BUSINESS_REQUIREMENTS.md §3.1: "xem liên tục trên 10 giây").
+const MinWatchForView = 10 * time.Second
 
 // AllowedVideoExtensions is the upload allow-list per BUSINESS_REQUIREMENTS.md
 // (".mp4", ".mov", ".mkv").
@@ -18,6 +25,16 @@ var AllowedVideoExtensions = map[string]bool{
 	".mp4": true,
 	".mov": true,
 	".mkv": true,
+}
+
+// AllowedImageExtensions is the upload allow-list for avatars, thumbnails and
+// post images.
+var AllowedImageExtensions = map[string]bool{
+	".jpg":  true,
+	".jpeg": true,
+	".png":  true,
+	".webp": true,
+	".gif":  true,
 }
 
 type VideoStatus string
@@ -59,6 +76,13 @@ type Video struct {
 	Views        int64           `json:"views"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
+
+	// Transcode job tracking (docs/message-contract.md §4.3). QueuedAt →
+	// TranscodeCompletedAt is the upload-to-playable latency (criterion T2).
+	CurrentJobID         string     `json:"current_job_id,omitempty"`
+	QueuedAt             *time.Time `json:"queued_at,omitempty"`
+	TranscodeStartedAt   *time.Time `json:"transcode_started_at,omitempty"`
+	TranscodeCompletedAt *time.Time `json:"transcode_completed_at,omitempty"`
 }
 
 // ViewableBy reports whether userID ("" = anonymous) may watch this video.

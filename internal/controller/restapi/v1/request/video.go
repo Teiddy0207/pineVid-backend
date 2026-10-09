@@ -27,11 +27,21 @@ type ConfirmUpload struct {
 	VideoID string `json:"video_id" validate:"required"`
 }
 
-type TranscodeCallback struct {
-	VideoID      string `json:"video_id" validate:"required"`
-	Status       string `json:"status" validate:"required,oneof=complete failed"`
-	HLSMasterURL string `json:"hls_master_url"`
-	ErrorMessage string `json:"error_message,omitempty"`
+// TranscodeWebhook is the signed worker → backend webhook body
+// (docs/message-contract.md §4.2).
+type TranscodeWebhook struct {
+	SchemaVersion int    `json:"schema_version" validate:"eq=1"`
+	JobID         string `json:"job_id" validate:"required"`
+	VideoID       string `json:"video_id" validate:"required"`
+	Status        string `json:"status" validate:"required,oneof=PROCESSING COMPLETED FAILED"`
+	HLSMasterURL  string `json:"hls_master_url"`
+	ErrorMessage  string `json:"error_message,omitempty"`
 }
 
+type RecordView struct {
+	Ticket string `json:"ticket" validate:"required"`
+}
 
+type CreateImageUpload struct {
+	FileName string `json:"file_name" validate:"required"`
+}

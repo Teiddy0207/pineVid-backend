@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/pkg/postgres"
 	redispkg "github.com/evrone/go-clean-template/pkg/redis"
 	"github.com/redis/go-redis/v9"
@@ -31,7 +33,22 @@ func trendingKey(day time.Time) string {
 type Repo struct {
 	*postgres.Postgres
 	Redis *redispkg.Redis
+
+	// ipCapDisabled turns off the anonymous per-IP hourly cap; only for load
+	// tests, where every request comes from one IP (BENCHMARK_MODE).
+	ipCapDisabled bool
+
+	// directDB writes every accepted view straight to videos.views instead of
+	// Redis INCR + batch sync. Only the control variant of the view-counter
+	// experiment (VIEW_COUNTER_MODE=direct_db).
+	directDB bool
 }
+
+// DisableIPCap is for BENCHMARK_MODE only.
+func (r *Repo) DisableIPCap() { r.ipCapDisabled = true }
+
+// UseDirectDB is for the VIEW_COUNTER_MODE=direct_db control experiment only.
+func (r *Repo) UseDirectDB() { r.directDB = true }
 
 func New(pg *postgres.Postgres, rdb *redispkg.Redis) *Repo {
 	return &Repo{
@@ -40,30 +57,132 @@ func New(pg *postgres.Postgres, rdb *redispkg.Redis) *Repo {
 	}
 }
 
-// RecordView records a new video view in Redis with IP + Device fingerprint deduplication (TTL 60s)
-func (r *Repo) RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error) {
+const (
+	// viewTicketTTL bounds how long a started playback can take to reach the
+	// minimum watch time (generous: the viewer may pause).
+	viewTicketTTL = 4 * time.Hour
+	// maxViewsPerIPPerHour caps how many views one IP can add to one video
+	// per hour, whatever device IDs it claims (X-Device-ID is client-chosen).
+	// High enough for a shared NAT (dorm, office), low enough to stop a
+	// script from inflating a video.
+	maxViewsPerIPPerHour = 10
+)
+
+func viewTicketKey(ticket string) string { return "view_ticket:" + ticket }
+
+// IssueViewTicket starts a view session: the returned one-time ticket can be
+// redeemed for a view once minWatch has elapsed (see RedeemViewTicket).
+func (r *Repo) IssueViewTicket(ctx context.Context, videoID string) (string, error) {
+	if r.Redis == nil || r.Redis.Client == nil {
+		return "", fmt.Errorf("ViewRepo - IssueViewTicket: redis unavailable")
+	}
+
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("ViewRepo - IssueViewTicket - rand.Read: %w", err)
+	}
+	ticket := hex.EncodeToString(raw)
+
+	value := fmt.Sprintf("%s|%d", videoID, time.Now().UnixMilli())
+	if err := r.Redis.Client.Set(ctx, viewTicketKey(ticket), value, viewTicketTTL).Err(); err != nil {
+		return "", fmt.Errorf("ViewRepo - IssueViewTicket - Set: %w", err)
+	}
+	return ticket, nil
+}
+
+// RedeemViewTicket consumes a ticket for videoID. It fails with
+// ErrViewTicketInvalid for an unknown, expired, already-used or other-video
+// ticket, and with ErrViewTicketTooEarly (ticket kept, retry later) when
+// less than minWatch has passed since it was issued — the 10-second rule is
+// enforced on the server clock, not trusted from the client.
+func (r *Repo) RedeemViewTicket(ctx context.Context, ticket, videoID string, minWatch time.Duration) error {
+	if r.Redis == nil || r.Redis.Client == nil || ticket == "" {
+		return entity.ErrViewTicketInvalid
+	}
+
+	key := viewTicketKey(ticket)
+	value, err := r.Redis.Client.Get(ctx, key).Result()
+	if err != nil {
+		return entity.ErrViewTicketInvalid
+	}
+
+	parts := strings.SplitN(value, "|", 2)
+	if len(parts) != 2 || parts[0] != videoID {
+		return entity.ErrViewTicketInvalid
+	}
+	issuedMs, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return entity.ErrViewTicketInvalid
+	}
+	if time.Since(time.UnixMilli(issuedMs)) < minWatch {
+		return entity.ErrViewTicketTooEarly
+	}
+
+	// DEL is the atomic "use once" step: of two concurrent redeems, only the
+	// one that actually deletes the key wins.
+	deleted, err := r.Redis.Client.Del(ctx, key).Result()
+	if err != nil {
+		return fmt.Errorf("ViewRepo - RedeemViewTicket - Del: %w", err)
+	}
+	if deleted == 0 {
+		return entity.ErrViewTicketInvalid
+	}
+	return nil
+}
+
+// ViewerID identifies "one person" for view dedup (proposal §4.3): the
+// account when logged in, otherwise a SHA-256 of IP + User-Agent. Known
+// limitation: anonymous viewers sharing a NAT IP and the same browser build
+// count as one person.
+func ViewerID(userID, clientIP, userAgent string) string {
+	if userID != "" {
+		return "u:" + userID
+	}
+	sum := sha256.Sum256([]byte(clientIP + "|" + userAgent))
+	return "a:" + hex.EncodeToString(sum[:16])
+}
+
+// DedupWindow is the "1 view per person per video" window.
+const DedupWindow = 60 * time.Second
+
+// RecordView records a view in Redis unless the same viewer (ViewerID) was
+// already counted for this video in the last DedupWindow. Anonymous viewers
+// are also capped per IP and hour; logged-in viewers are already one per
+// account. It reports whether the view counted and the pending (not yet
+// synced) count.
+func (r *Repo) RecordView(ctx context.Context, videoID, userID, clientIP, userAgent string) (bool, int64, error) {
 	if r.Redis == nil || r.Redis.Client == nil {
 		return r.recordViewFallback(ctx, videoID)
 	}
 
-	// Create IP + Device Fingerprint hash
-	rawFingerprint := fmt.Sprintf("%s:%s", clientIP, deviceID)
-	hash := sha256.Sum256([]byte(rawFingerprint))
-	fpHash := hex.EncodeToString(hash[:8])
+	dedupKey := fmt.Sprintf("view_dedup:%s:%s", videoID, ViewerID(userID, clientIP, userAgent))
 
-	dedupKey := fmt.Sprintf("view_dedup:%s:%s", videoID, fpHash)
-
-	// Try setting dedup key with 60-second TTL
-	isNewView, err := r.Redis.Client.SetNX(ctx, dedupKey, "1", 60*time.Second).Result()
+	// SET NX EX is atomic: of concurrent requests from one viewer, only one wins.
+	isNewView, err := r.Redis.Client.SetNX(ctx, dedupKey, "1", DedupWindow).Result()
 	if err != nil {
 		return false, 0, fmt.Errorf("ViewRepo - RecordView - SetNX: %w", err)
 	}
 
 	if !isNewView {
-		// Duplicate view within 60s window; get current pending views
-		countStr, _ := r.Redis.Client.Get(ctx, fmt.Sprintf("video_views:%s", videoID)).Result()
-		currentViews, _ := strconv.ParseInt(countStr, 10, 64)
-		return false, currentViews, nil
+		return false, r.GetPendingViewsForVideo(ctx, videoID), nil
+	}
+
+	if userID == "" && !r.ipCapDisabled {
+		ipKey := fmt.Sprintf("view_ip:%s:%s", videoID, clientIP)
+		ipCount, err := r.Redis.Client.Incr(ctx, ipKey).Result()
+		if err != nil {
+			return false, 0, fmt.Errorf("ViewRepo - RecordView - Incr ip: %w", err)
+		}
+		if ipCount == 1 {
+			r.Redis.Client.Expire(ctx, ipKey, time.Hour)
+		}
+		if ipCount > maxViewsPerIPPerHour {
+			return false, r.GetPendingViewsForVideo(ctx, videoID), nil
+		}
+	}
+
+	if r.directDB {
+		return r.recordViewDirect(ctx, videoID)
 	}
 
 	// Increment pending view counter in Redis
@@ -82,6 +201,25 @@ func (r *Repo) RecordView(ctx context.Context, videoID, clientIP, deviceID strin
 	_, _ = pipe.Exec(ctx)
 
 	return true, newViews, nil
+}
+
+// recordViewDirect is the control variant: one UPDATE per accepted view, so
+// concurrent views of one video queue on that row's lock.
+func (r *Repo) recordViewDirect(ctx context.Context, videoID string) (bool, int64, error) {
+	sql, args, err := r.Builder.
+		Update("videos").
+		Set("views", squirrel.Expr("views + 1")).
+		Where(squirrel.Eq{"id": videoID}).
+		Suffix("RETURNING views").
+		ToSql()
+	if err != nil {
+		return false, 0, fmt.Errorf("ViewRepo - recordViewDirect - ToSql: %w", err)
+	}
+	var views int64
+	if err := r.Pool.QueryRow(ctx, sql, args...).Scan(&views); err != nil {
+		return false, 0, fmt.Errorf("ViewRepo - recordViewDirect - QueryRow: %w", err)
+	}
+	return true, views, nil
 }
 
 // GetTrendingVideoIDs returns up to `limit` video IDs ranked by view count
@@ -115,92 +253,25 @@ func (r *Repo) GetTrendingVideoIDs(ctx context.Context, days, limit int) ([]stri
 	return ids, nil
 }
 
-// GetPendingViewsForVideo returns real-time pending views for a video in Redis
+// viewSyncInflightKey is the hash the view-counter worker moves counts into
+// while it writes them to Postgres (worker/module/view_sync.go).
+const viewSyncInflightKey = "view_sync:inflight"
+
+// GetPendingViewsForVideo returns views recorded in Redis but not yet synced
+// to videos.views — including any the worker has claimed but not committed,
+// so the displayed total never dips during a sync.
 func (r *Repo) GetPendingViewsForVideo(ctx context.Context, videoID string) int64 {
 	if r.Redis == nil || r.Redis.Client == nil {
 		return 0
 	}
-	countStr, err := r.Redis.Client.Get(ctx, fmt.Sprintf("video_views:%s", videoID)).Result()
-	if err != nil {
-		return 0
-	}
-	cnt, _ := strconv.ParseInt(countStr, 10, 64)
-	return cnt
-}
+	pipe := r.Redis.Client.Pipeline()
+	counter := pipe.Get(ctx, fmt.Sprintf("video_views:%s", videoID))
+	inflight := pipe.HGet(ctx, viewSyncInflightKey, videoID)
+	_, _ = pipe.Exec(ctx)
 
-// GetPendingViews scans all pending view counts in Redis
-func (r *Repo) GetPendingViews(ctx context.Context) (map[string]int64, error) {
-	if r.Redis == nil || r.Redis.Client == nil {
-		return map[string]int64{}, nil
-	}
-
-	pending := make(map[string]int64)
-	var cursor uint64
-	var keys []string
-	var err error
-
-	for {
-		keys, cursor, err = r.Redis.Client.Scan(ctx, cursor, "video_views:*", 100).Result()
-		if err != nil {
-			return nil, fmt.Errorf("ViewRepo - GetPendingViews - Scan: %w", err)
-		}
-
-		for _, key := range keys {
-			videoID := strings.TrimPrefix(key, "video_views:")
-			countStr, getErr := r.Redis.Client.Get(ctx, key).Result()
-			if getErr == nil {
-				if cnt, parseErr := strconv.ParseInt(countStr, 10, 64); parseErr == nil && cnt > 0 {
-					pending[videoID] = cnt
-				}
-			}
-		}
-
-		if cursor == 0 {
-			break
-		}
-	}
-
-	return pending, nil
-}
-
-// SyncBatchViewsToPostgres syncs Redis views to Postgres in a single transaction
-func (r *Repo) SyncBatchViewsToPostgres(ctx context.Context, pendingViews map[string]int64) error {
-	if len(pendingViews) == 0 {
-		return nil
-	}
-
-	tx, err := r.Pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("ViewRepo - SyncBatchViewsToPostgres - Begin: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	for videoID, viewIncrement := range pendingViews {
-		sql, args, err := r.Builder.
-			Update("videos").
-			Set("views", squirrel.Expr("views + ?", viewIncrement)).
-			Where(squirrel.Eq{"id": videoID}).
-			ToSql()
-		if err != nil {
-			return fmt.Errorf("ViewRepo - SyncBatchViewsToPostgres - ToSql: %w", err)
-		}
-
-		if _, err := tx.Exec(ctx, sql, args...); err != nil {
-			return fmt.Errorf("ViewRepo - SyncBatchViewsToPostgres - Exec: %w", err)
-		}
-
-		// Decrement processed amount from Redis
-		if r.Redis != nil && r.Redis.Client != nil {
-			viewKey := fmt.Sprintf("video_views:%s", videoID)
-			r.Redis.Client.DecrBy(ctx, viewKey, viewIncrement)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("ViewRepo - SyncBatchViewsToPostgres - Commit: %w", err)
-	}
-
-	return nil
+	a, _ := strconv.ParseInt(counter.Val(), 10, 64)
+	b, _ := strconv.ParseInt(inflight.Val(), 10, 64)
+	return a + b
 }
 
 // recordViewFallback increments views directly in Postgres if Redis is disabled

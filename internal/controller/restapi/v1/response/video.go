@@ -36,6 +36,18 @@ type UploadUrlResponse struct {
 	RawS3Key  string `json:"raw_s3_key"`
 }
 
+// ImageUploadResponse carries the presigned PUT URL and the permanent public
+// URL the image will be served from once uploaded.
+type ImageUploadResponse struct {
+	UploadUrl string `json:"upload_url"`
+	PublicUrl string `json:"public_url"`
+}
+
+type ViewSessionResponse struct {
+	Ticket          string `json:"ticket"`
+	MinWatchSeconds int    `json:"min_watch_seconds" example:"10"`
+}
+
 type RecordViewResponse struct {
 	VideoID    string `json:"video_id"`
 	Recorded   bool   `json:"recorded"`

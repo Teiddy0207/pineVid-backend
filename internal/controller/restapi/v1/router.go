@@ -9,12 +9,21 @@ import (
 	"github.com/evrone/go-clean-template/pkg/jwt"
 	"github.com/evrone/go-clean-template/pkg/logger"
 	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 )
 
+// NewInternalRoutes registers the signed service webhooks under /internal
+// (docs/message-contract.md §4): POST /internal/webhooks/transcode.
+func NewInternalRoutes(internalGroup fiber.Router, vd usecase.Video, hub *events.Hub, webhookSecret string, l logger.Interface) {
+	r := &V1{vd: vd, hub: hub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+
+	internalGroup.Post("/webhooks/transcode", middleware.RequireWebhookSignature(webhookSecret, nil), r.transcodeWebhook)
+}
+
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, ps usecase.Post, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, up usecase.UserPreference, sv usecase.SavedVideo, hub *events.Hub, chatHub *events.ChatHub, jwtManager *jwt.Manager, internalSecret string, rl *middleware.RateLimiter, l logger.Interface) {
-	r := &V1{u: u, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, ps: ps, rc: rc, hs: hs, fw: fw, notif: nt, vocab: vb, sub: sub, up: up, sv: sv, hub: hub, chatHub: chatHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls usecase.Livestream, ad usecase.Admin, lk usecase.Like, cm usecase.Comment, ps usecase.Post, rc usecase.Recommendation, hs usecase.History, fw usecase.Follow, nt usecase.Notification, vb usecase.Vocabulary, sub usecase.Subtitle, up usecase.UserPreference, sv usecase.SavedVideo, hub *events.Hub, chatHub *events.ChatHub, viewHub *events.ViewHub, jwtManager *jwt.Manager, internalSecret string, rl *middleware.RateLimiter, l logger.Interface) {
+	r := &V1{u: u, vd: vd, ls: ls, ad: ad, lk: lk, cm: cm, ps: ps, rc: rc, hs: hs, fw: fw, notif: nt, vocab: vb, sub: sub, up: up, sv: sv, hub: hub, chatHub: chatHub, viewHub: viewHub, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
 	auth := middleware.Auth(jwtManager, u)
 	optionalAuth := middleware.OptionalAuth(jwtManager, u)
@@ -39,6 +48,7 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		videosPublicGroup.Get("/feed/personalized", r.getPersonalizedFeed)
 		videosPublicGroup.Get("/:id", r.getVideo)
 		videosPublicGroup.Get("/:id/subtitles", r.getVideoSubtitles)
+		videosPublicGroup.Post("/:id/view-session", rl.Limit("view-session", 60, time.Minute), r.startViewSession)
 		videosPublicGroup.Post("/:id/views", rl.Limit("views", 60, time.Minute), r.recordVideoView)
 		videosPublicGroup.Get("/:id/comments", r.listVideoComments)
 	}
@@ -77,8 +87,8 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		channelsPublicGroup.Get("/:id/posts", r.listUserPosts)
 	}
 
-	// Internal service-to-service webhooks: transcode worker + SRS http_hooks.
-	apiV1Group.Post("/transcode/callback", internalOnly, r.transcodeCallback)
+	// Internal service-to-service webhooks: worker heartbeat + SRS http_hooks.
+	// The transcode webhook lives under /internal (NewInternalRoutes).
 	apiV1Group.Post("/admin/workers/heartbeat", internalOnly, r.recordWorkerHeartbeat)
 
 	// SSE streams. Video status and notifications are per-user, so they need
@@ -87,6 +97,11 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 	apiV1Group.Get("/events/videos", middleware.SSEAuth(jwtManager, u), r.sseVideoEvents)
 	apiV1Group.Get("/events/chat/:id", r.sseChatEvents)
 	apiV1Group.Get("/events/notifications", middleware.SSEAuth(jwtManager, u), r.sseNotificationEvents)
+
+	// Live view counter of a watch page (docs/message-contract.md §2.3).
+	// Browsers can't set headers on a WebSocket, so it is anonymous: only
+	// publicly viewable videos can be watched this way.
+	apiV1Group.Get("/ws/videos/:id/views", r.wsViewsUpgrade, websocket.New(r.wsViews))
 
 	livePublicGroup := apiV1Group.Group("/live")
 	{
@@ -128,6 +143,8 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 	}
 
 	protected.Post("/channels/:id/follow", rl.Limit("follow", 30, time.Minute), r.toggleFollowChannel)
+
+	protected.Post("/uploads/image-url", rl.Limit("upload-image", 60, time.Hour), r.createImageUpload)
 
 	studioGroup := protected.Group("/studio")
 	{

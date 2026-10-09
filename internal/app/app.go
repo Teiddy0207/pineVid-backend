@@ -12,6 +12,7 @@ import (
 	"github.com/evrone/go-clean-template/config"
 	"github.com/evrone/go-clean-template/internal/controller/grpc"
 	grpcmw "github.com/evrone/go-clean-template/internal/controller/grpc/middleware"
+	"github.com/evrone/go-clean-template/internal/controller/natsjobs"
 	natsrpc "github.com/evrone/go-clean-template/internal/controller/nats_rpc"
 	"github.com/evrone/go-clean-template/internal/controller/restapi"
 	"github.com/evrone/go-clean-template/internal/events"
@@ -47,6 +48,7 @@ import (
 	recusecase "github.com/evrone/go-clean-template/internal/usecase/recommendation"
 	savedvideousecase "github.com/evrone/go-clean-template/internal/usecase/savedvideo"
 	subtitleusecase "github.com/evrone/go-clean-template/internal/usecase/subtitle"
+	"github.com/evrone/go-clean-template/internal/usecase/transcodejob"
 	"github.com/evrone/go-clean-template/internal/usecase/user"
 	userprefusecase "github.com/evrone/go-clean-template/internal/usecase/userpreference"
 	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
@@ -82,6 +84,9 @@ type useCases struct {
 	subtitle       usecase.Subtitle
 	userPreference usecase.UserPreference
 	savedVideo     usecase.SavedVideo
+
+	// natsPub is nil when NATS is unreachable at startup.
+	natsPub *nats.Publisher
 }
 
 type servers struct {
@@ -115,16 +120,66 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	viewRepo := persistViewRepo.New(pg, redisClient)
 	likeRepo := persistLikeRepo.New(pg, redisClient)
 
-	natsPub, _ := nats.NewPublisher()
-	notifUc := notifusecase.New(notifRepo, followRepo, notifHub)
-	videoUc := videousecase.New(videoRepo, viewRepo, likeRepo, savedVideoRepo, natsPub, notifUc)
+	if cfg.Benchmark.Mode {
+		viewRepo.DisableIPCap()
+		l.Info("BENCHMARK_MODE: per-IP view cap disabled")
+	}
+
+	if cfg.ViewCounter.Mode == "direct_db" {
+		viewRepo.UseDirectDB()
+		l.Info("VIEW_COUNTER_MODE=direct_db: every accepted view is written straight to Postgres (control variant)")
+	}
 
 	minioClient, err := pkgminio.New(cfg.Minio.Endpoint, cfg.Minio.AccessKey, cfg.Minio.SecretKey, cfg.Minio.UseSSL)
 	if err != nil {
 		l.Error(fmt.Errorf("app - initUseCases - pkgminio.New: %w", err))
 	}
+
+	natsPub, err := nats.NewPublisher()
+	if err != nil {
+		l.Error(fmt.Errorf("app - initUseCases - nats.NewPublisher: %w", err))
+	}
+	// Without a publisher every enqueue fails with 503 instead of silently
+	// dropping the job (a nil *Publisher must not become a non-nil interface).
+	var jobPub transcodejob.Publisher
+	if natsPub != nil {
+		jobPub = natsPub
+	}
+	
+	if cfg.TranscodeSync.Mode == "sync" {
+		syncRunner, err := transcodejob.NewSyncRunner(
+			videoRepo,
+			cfg.Minio.Endpoint, cfg.Minio.AccessKey, cfg.Minio.SecretKey, cfg.Minio.UseSSL,
+			cfg.Minio.RawBucket, cfg.TranscodeSync.MinioHLSBucket,
+			cfg.TranscodeSync.FFmpegPath, cfg.TranscodeSync.FFprobePath, cfg.TranscodeSync.TempDir,
+		)
+		if err != nil {
+			l.Fatal(fmt.Errorf("app - initUseCases - NewSyncRunner: %w", err))
+		}
+		jobPub = syncRunner
+	}
+
+	jobs := transcodejob.New(videoRepo, jobPub, cfg.Transcode.Renditions)
+
+	notifUc := notifusecase.New(notifRepo, followRepo, notifHub)
+	videoUc := videousecase.New(videoRepo, viewRepo, likeRepo, savedVideoRepo, jobs, notifUc).WithUploadBaseURL(cfg.Minio.PublicURL).WithPublicBucket(cfg.Minio.PublicBucket)
+	if cfg.Benchmark.Mode {
+		videoUc.DisableTicketWait()
+	}
+	if natsPub != nil {
+		videoUc.WithViewPublisher(natsPub)
+	}
+
 	srsClient := pkgsrs.New(cfg.SRS.APIURL)
-	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, natsPub, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
+	if cfg.Minio.PresignUploads {
+		signer, err := pkgminio.NewSigner(cfg.Minio.PublicURL, cfg.Minio.AccessKey, cfg.Minio.SecretKey)
+		if err != nil {
+			l.Fatal(fmt.Errorf("app - initUseCases - pkgminio.NewSigner: %w", err))
+		}
+		videoUc.WithUploadSigner(signer, cfg.Minio.RawBucket)
+		l.Info("MINIO_PRESIGN_UPLOADS: browser uploads use presigned PUT URLs")
+	}
+	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, jobs, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
 	livestreamUc.StartReconciliationLoop(context.Background(), cfg.SRS.ReconcileInterval)
 	workerRepo := persistWorkerRepo.New(pg)
 	adminStatsRepo := persistAdminStatsRepo.New(pg)
@@ -158,6 +213,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		subtitle:       subtitleUc,
 		userPreference: userPrefUc,
 		savedVideo:     savedVideoUc,
+		natsPub:        natsPub,
 	}
 }
 
@@ -186,6 +242,25 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 
 	// HTTP Server
 	videoEventHub := events.NewHub()
+
+	// Live view counters: every backend instance subscribes to
+	// video.views.updated and pushes to its own WebSocket clients.
+	viewHub := events.NewViewHub(250 * time.Millisecond)
+	go viewHub.Run(context.Background())
+	if uc.natsPub != nil {
+		if _, err := uc.natsPub.SubscribeViewUpdated(func(ev nats.ViewUpdated) {
+			viewHub.Publish(events.ViewUpdate{VideoID: ev.VideoID, TotalViews: ev.TotalViews, TS: ev.TS})
+		}); err != nil {
+			l.Error(fmt.Errorf("app - initServers - SubscribeViewUpdated: %w", err))
+		}
+	}
+
+	// Dead-lettered transcode jobs mark their video failed (contract §2.2).
+	if uc.natsPub != nil {
+		if _, err := uc.natsPub.SubscribeTranscodeDLQ(natsjobs.DLQHandler(uc.video, videoEventHub, l)); err != nil {
+			l.Error(fmt.Errorf("app - initServers - SubscribeTranscodeDLQ: %w", err))
+		}
+	}
 	// WriteTimeout is unlimited: fasthttp applies it as a single deadline for
 	// the connection's entire response, which fasthttp only surfaces as an
 	// error on the *next* write attempted after it elapses (it doesn't
@@ -194,7 +269,7 @@ func initServers(cfg *config.Config, uc useCases, chatHub *events.ChatHub, jwtMa
 	// events) silently stopped delivering anything sent more than ~5s after
 	// the client connected, even though the connection looked "open".
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode), httpserver.WriteTimeout(0), httpserver.TrustedProxies(cfg.HTTP.TrustedProxies))
-	restapi.NewRouter(httpServer.App, cfg, uc.user, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.post, uc.recommendation, uc.history, uc.follow, uc.notification, uc.vocabulary, uc.subtitle, uc.userPreference, uc.savedVideo, videoEventHub, chatHub, jwtManager, l)
+	restapi.NewRouter(httpServer.App, cfg, uc.user, uc.video, uc.livestream, uc.admin, uc.like, uc.comment, uc.post, uc.recommendation, uc.history, uc.follow, uc.notification, uc.vocabulary, uc.subtitle, uc.userPreference, uc.savedVideo, videoEventHub, chatHub, viewHub, jwtManager, l)
 
 	return servers{
 		nats: natsServer,

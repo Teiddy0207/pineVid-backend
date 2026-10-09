@@ -33,8 +33,17 @@ func init() {
 		m        *migrate.Migrate
 	)
 
+	// "file://migrations" is ambiguous: golang-migrate parses it as
+	// Host=migrations, Path="" which resolves to "." in the container.
+	// Use an absolute path when /migrations exists (Docker), otherwise
+	// fall back to the relative path used by `go run` on the host.
+	migrationsURL := "file://./migrations"
+	if _, statErr := os.Stat("/migrations"); statErr == nil {
+		migrationsURL = "file:///migrations"
+	}
+
 	for attempts > 0 {
-		m, err = migrate.New("file://migrations", databaseURL)
+		m, err = migrate.New(migrationsURL, databaseURL)
 		if err == nil {
 			break
 		}

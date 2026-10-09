@@ -5,7 +5,8 @@
 # calls: token rotation, SSE auth, webhook secrets, private/banned video
 # access, identity spoofing, bans, IP spoofing, CORS and rate limiting.
 #
-# Requirements: curl, jq, the backend running, and the `db` compose container
+# Requirements: curl, jq, openssl, the backend running (with NATS, so
+# confirm-upload can queue a job), and the `db` compose container
 # (used once to promote a throwaway account to admin).
 #
 # Usage:  backend/scripts/e2e_security.sh            (API defaults to :8080)
@@ -35,6 +36,16 @@ check() { # check <description> <expected> <actual>
 
 # status <curl args...> — prints only the HTTP status code
 status() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+
+# signed_webhook <json> <idempotency-key> [secret] — POSTs a transcode webhook
+# signed per docs/message-contract.md §4.1; prints the HTTP status code.
+signed_webhook() {
+	local body="$1" ts sig
+	ts=$(date +%s)
+	sig=$(printf '%s.%s' "$ts" "$body" | openssl dgst -sha256 -hmac "${3:-$SECRET}" | awk '{print $2}')
+	status -X POST "$API/internal/webhooks/transcode" -H 'Content-Type: application/json' \
+		-H "Idempotency-Key: $2" -H "X-Timestamp: $ts" -H "X-Signature: $sig" -d "$body"
+}
 
 json_post() { # json_post <url> <json> [token]
 	local auth=()
@@ -78,8 +89,9 @@ check "video-status SSE without token is rejected" "401" "$(status --max-time 3 
 check "regular API does not accept ?token=" "401" "$(status "$V1/user/profile?token=$TOKEN_A")"
 
 echo "-- 1.4 Internal webhook secret"
-check "transcode callback without secret" "401" "$(status -X POST "$V1/transcode/callback" -H 'Content-Type: application/json' -d '{"video_id":"x","status":"complete"}')"
-check "transcode callback with wrong secret" "401" "$(status -X POST "$V1/transcode/callback" -H 'X-Internal-Token: nope' -H 'Content-Type: application/json' -d '{"video_id":"x","status":"complete"}')"
+check "transcode webhook without signature" "401" "$(status -X POST "$API/internal/webhooks/transcode" -H 'Content-Type: application/json' -H 'Idempotency-Key: j:COMPLETED' -d '{"schema_version":1,"job_id":"j","video_id":"x","status":"COMPLETED"}')"
+check "transcode webhook signed with the wrong secret" "401" "$(signed_webhook '{"schema_version":1,"job_id":"j","video_id":"x","status":"COMPLETED"}' 'j:COMPLETED' nope)"
+check "transcode webhook: the shared token alone is not enough" "401" "$(status -X POST "$API/internal/webhooks/transcode" -H "X-Internal-Token: $SECRET" -H 'Content-Type: application/json' -H 'Idempotency-Key: j:COMPLETED' -d '{"schema_version":1,"job_id":"j","video_id":"x","status":"COMPLETED"}')"
 check "worker heartbeat without secret" "401" "$(status -X POST "$V1/admin/workers/heartbeat" -H 'Content-Type: application/json' -d '{}')"
 check "SRS on_publish without secret" "401" "$(status -X POST "$V1/live/auth" -H 'Content-Type: application/json' -d '{"stream":"x"}')"
 check "SRS on_dvr without secret" "401" "$(status -X POST "$V1/live/dvr" -H 'Content-Type: application/json' -d '{"stream":"x"}')"
@@ -91,7 +103,10 @@ VID=$(jq -r .video_id <<<"$UPLOAD")
 check "pending (not yet transcoded) video is hidden from others" "404" "$(status "$V1/videos/$VID" -H "Authorization: Bearer $TOKEN_B")"
 check "...but visible to its owner" "200" "$(status "$V1/videos/$VID" -H "Authorization: Bearer $TOKEN_A")"
 check "confirm-upload of someone else's video is forbidden" "403" "$(status -X POST "$V1/studio/confirm-upload" -H "Authorization: Bearer $TOKEN_B" -H 'Content-Type: application/json' -d "{\"video_id\":\"$VID\"}")"
-curl -s -o /dev/null -X POST "$V1/transcode/callback" -H "X-Internal-Token: $SECRET" -H 'Content-Type: application/json' -d "{\"video_id\":\"$VID\",\"status\":\"complete\",\"hls_master_url\":\"/hls-streams/videos/$VID/master.m3u8\"}"
+check "confirm-upload queues a transcode job" "200" "$(status -X POST "$V1/studio/confirm-upload" -H "Authorization: Bearer $TOKEN_A" -H 'Content-Type: application/json' -d "{\"video_id\":\"$VID\"}")"
+JOB=$(docker exec "$DB_CONTAINER" psql -U user -d db -tAc "SELECT current_job_id FROM videos WHERE id='$VID'")
+DONE="{\"schema_version\":1,\"job_id\":\"$JOB\",\"video_id\":\"$VID\",\"status\":\"COMPLETED\",\"hls_master_url\":\"/hls-streams/videos/$VID/master.m3u8\"}"
+check "signed COMPLETED webhook is accepted" "200" "$(signed_webhook "$DONE" "$JOB:COMPLETED")"
 check "completed public video is visible to anyone" "200" "$(status "$V1/videos/$VID")"
 check "invalid visibility value is rejected" "400" "$(status -X PUT "$V1/studio/videos/$VID" -H "Authorization: Bearer $TOKEN_A" -H 'Content-Type: application/json' -d '{"visibility":"hacked"}')"
 curl -s -o /dev/null -X PUT "$V1/studio/videos/$VID" -H "Authorization: Bearer $TOKEN_A" -H 'Content-Type: application/json' -d '{"visibility":"private"}'
@@ -118,11 +133,23 @@ check "chat sender comes from the account, not the body" "bob_$RUN_ID" "$(jq -r 
 echo "-- 1.7 Channel page"
 check "public channel page does not expose email" "false" "$(curl -s "$V1/channels/$USER_A" | jq 'has("email")')"
 
-echo "-- 2.2 View dedup cannot be bypassed with X-Forwarded-For"
-R1=$(curl -s -X POST "$V1/videos/$VID/views" -H 'X-Forwarded-For: 1.1.1.1' -H 'X-Device-ID: dev-1' | jq -r .recorded)
-R2=$(curl -s -X POST "$V1/videos/$VID/views" -H 'X-Forwarded-For: 2.2.2.2' -H 'X-Device-ID: dev-1' | jq -r .recorded)
-check "first view recorded" "true" "$R1"
-check "second view with a spoofed IP is deduplicated" "false" "$R2"
+echo "-- 2.2 View counting: tickets and dedup (1 view / person / video / 60 s)"
+view_ticket() { curl -s -X POST "$V1/videos/$VID/view-session" | jq -r .ticket; }
+record_view() { # record_view <ticket> <x-forwarded-for> -> response JSON
+	curl -s -X POST "$V1/videos/$VID/views" -H "X-Forwarded-For: $2" -H 'User-Agent: e2e-browser/1.0' \
+		-H 'Content-Type: application/json' -d "{\"ticket\":\"$1\"}"
+}
+check "a view without a ticket is refused" "400" "$(status -X POST "$V1/videos/$VID/views")"
+EARLY=$(view_ticket)
+check "redeeming a ticket before 10 s of watching is refused (425)" "425" "$(status -X POST "$V1/videos/$VID/views" -H 'Content-Type: application/json' -d "{\"ticket\":\"$EARLY\"}")"
+T1=$(view_ticket)
+T2=$(view_ticket)
+sleep 11 # minimum watch time, checked on the server clock
+R1=$(record_view "$T1" 1.1.1.1)
+check "first view recorded" "true" "$(jq -r .recorded <<<"$R1")"
+check "total_views includes it" "true" "$([[ $(jq -r .total_views <<<"$R1") -ge 1 ]] && echo true || echo false)"
+check "second view with a spoofed IP (same person) is deduplicated" "false" "$(record_view "$T2" 2.2.2.2 | jq -r .recorded)"
+check "a ticket is single-use" "400" "$(status -X POST "$V1/videos/$VID/views" -H 'Content-Type: application/json' -d "{\"ticket\":\"$T1\"}")"
 
 echo "-- 1.5 Bans take effect immediately"
 check "non-admin cannot ban" "403" "$(status -X POST "$V1/admin/users/$USER_A/ban" -H "Authorization: Bearer $TOKEN_B")"
@@ -135,7 +162,7 @@ check "bob's token works again after unban" "200" "$(status "$V1/user/profile" -
 check "admin takes the video down" "200" "$(status -X POST "$V1/admin/videos/$VID/ban" -H "Authorization: Bearer $TOKEN_ADMIN")"
 check "banned video: 404 for everyone else" "404" "$(status "$V1/videos/$VID")"
 check "banned video: owner still sees it (Studio)" "200" "$(status "$V1/videos/$VID" -H "Authorization: Bearer $TOKEN_A")"
-curl -s -o /dev/null -X POST "$V1/transcode/callback" -H "X-Internal-Token: $SECRET" -H 'Content-Type: application/json' -d "{\"video_id\":\"$VID\",\"status\":\"complete\",\"hls_master_url\":\"/evil/master.m3u8\"}"
+signed_webhook "{\"schema_version\":1,\"job_id\":\"$JOB\",\"video_id\":\"$VID\",\"status\":\"COMPLETED\",\"hls_master_url\":\"/evil/master.m3u8\"}" "$JOB:COMPLETED" >/dev/null
 check "a later transcode callback cannot revive a banned video" "404" "$(status "$V1/videos/$VID")"
 
 curl -s -o /dev/null "$V1/studio/live/key" -H "Authorization: Bearer $TOKEN_A" # creates the livestream row

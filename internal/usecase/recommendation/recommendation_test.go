@@ -36,6 +36,20 @@ func (m *mockVideoRepo) List(ctx context.Context, filter repo.VideoFilter) ([]en
 func (m *mockVideoRepo) Update(ctx context.Context, v *entity.Video) error {
 	return m.Called(ctx, v).Error(0)
 }
+func (m *mockVideoRepo) SetStatus(ctx context.Context, id string, status entity.VideoStatus, at time.Time) error {
+	return m.Called(ctx, id, status, at).Error(0)
+}
+func (m *mockVideoRepo) MarkQueued(ctx context.Context, id, jobID string, from entity.VideoStatus, at time.Time) (bool, error) {
+	a := m.Called(ctx, id, jobID, from, at)
+	return a.Bool(0), a.Error(1)
+}
+func (m *mockVideoRepo) RevertQueued(ctx context.Context, id, jobID string, to entity.VideoStatus, at time.Time) error {
+	return m.Called(ctx, id, jobID, to, at).Error(0)
+}
+func (m *mockVideoRepo) ApplyTranscodeEvent(ctx context.Context, ev entity.TranscodeEvent, at time.Time) (entity.TranscodeEventResult, error) {
+	a := m.Called(ctx, ev, at)
+	return a.Get(0).(entity.TranscodeEventResult), a.Error(1)
+}
 func (m *mockVideoRepo) Delete(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
 }

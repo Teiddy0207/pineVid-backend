@@ -238,6 +238,21 @@ func (m *MockVideoRepo) EXPECT() *MockVideoRepoMockRecorder {
 	return m.recorder
 }
 
+// ApplyTranscodeEvent mocks base method.
+func (m *MockVideoRepo) ApplyTranscodeEvent(ctx context.Context, ev entity.TranscodeEvent, at time.Time) (entity.TranscodeEventResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyTranscodeEvent", ctx, ev, at)
+	ret0, _ := ret[0].(entity.TranscodeEventResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyTranscodeEvent indicates an expected call of ApplyTranscodeEvent.
+func (mr *MockVideoRepoMockRecorder) ApplyTranscodeEvent(ctx, ev, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyTranscodeEvent", reflect.TypeOf((*MockVideoRepo)(nil).ApplyTranscodeEvent), ctx, ev, at)
+}
+
 // Delete mocks base method.
 func (m *MockVideoRepo) Delete(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -296,6 +311,49 @@ func (m *MockVideoRepo) List(ctx context.Context, filter repo.VideoFilter) ([]en
 func (mr *MockVideoRepoMockRecorder) List(ctx, filter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockVideoRepo)(nil).List), ctx, filter)
+}
+
+// MarkQueued mocks base method.
+func (m *MockVideoRepo) MarkQueued(ctx context.Context, id, jobID string, from entity.VideoStatus, at time.Time) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkQueued", ctx, id, jobID, from, at)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkQueued indicates an expected call of MarkQueued.
+func (mr *MockVideoRepoMockRecorder) MarkQueued(ctx, id, jobID, from, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkQueued", reflect.TypeOf((*MockVideoRepo)(nil).MarkQueued), ctx, id, jobID, from, at)
+}
+
+// RevertQueued mocks base method.
+func (m *MockVideoRepo) RevertQueued(ctx context.Context, id, jobID string, to entity.VideoStatus, at time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevertQueued", ctx, id, jobID, to, at)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RevertQueued indicates an expected call of RevertQueued.
+func (mr *MockVideoRepoMockRecorder) RevertQueued(ctx, id, jobID, to, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevertQueued", reflect.TypeOf((*MockVideoRepo)(nil).RevertQueued), ctx, id, jobID, to, at)
+}
+
+// SetStatus mocks base method.
+func (m *MockVideoRepo) SetStatus(ctx context.Context, id string, status entity.VideoStatus, at time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetStatus", ctx, id, status, at)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetStatus indicates an expected call of SetStatus.
+func (mr *MockVideoRepoMockRecorder) SetStatus(ctx, id, status, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStatus", reflect.TypeOf((*MockVideoRepo)(nil).SetStatus), ctx, id, status, at)
 }
 
 // Store mocks base method.

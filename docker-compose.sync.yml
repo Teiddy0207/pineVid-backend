@@ -1,0 +1,26 @@
+# docker-compose.sync.yml — override for the synchronous transcode experiment.
+# Replaces the async NATS pipeline with inline FFmpeg in the app process.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.sync.yml up --build
+#
+# What changes vs the base compose:
+#   • app uses Dockerfile.sync (FFmpeg bundled in the image)
+#   • TRANSCODE_MODE=sync & BENCHMARK_MODE=true are injected into app
+#   • transcode-worker is disabled (scale 0) — not needed in sync mode
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.sync
+    environment:
+      TRANSCODE_MODE: "sync"
+      BENCHMARK_MODE: "true"
+      FFMPEG_PATH: "/usr/bin/ffmpeg"
+      FFPROBE_PATH: "/usr/bin/ffprobe"
+      TEMP_DIR: "/tmp/transcode"
+      MINIO_HLS_BUCKET: "hls-streams"
+
+  transcode-worker:
+    profiles:
+      - disabled

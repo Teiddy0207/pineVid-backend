@@ -242,6 +242,48 @@ services:
         aliases:
           - srs.lvh.me
 
+  transcode-worker:
+    container_name: transcode-worker
+    platform: linux/amd64
+    build:
+      context: ../transcode
+      dockerfile: Dockerfile.worker
+    environment:
+      NATS_URL: "nats://${NATS_USER}:${NATS_PASSWORD}@nats:4222"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "${MINIO_ROOT_USER}"
+      MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
+      MINIO_USE_SSL: "false"
+      BACKEND_WEBHOOK_URL: "http://app:8080/internal/webhooks/transcode"
+      BACKEND_BASE_URL: "http://app:8080"
+      INTERNAL_WEBHOOK_SECRET: "${INTERNAL_WEBHOOK_SECRET}"
+      RENDITIONS: "720p,480p"
+      FFMPEG_PATH: "/usr/local/bin/ffmpeg"
+      FFPROBE_PATH: "/usr/local/bin/ffprobe"
+    depends_on:
+      - nats
+      - minio
+      - app
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  view-sync:
+    container_name: view-sync
+    build:
+      context: ../worker
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: "redis:6379"
+      PG_URL: "postgres://user:${POSTGRES_PASSWORD}@db:5432/db"
+      VIEW_SYNC_INTERVAL: "2m"
+    depends_on:
+      - redis
+      - db
+    restart: unless-stopped
+    networks:
+      - app_network
+
 networks:
   app_network:
     external: false

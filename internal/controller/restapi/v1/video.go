@@ -185,6 +185,40 @@ func (r *V1) createVideoUpload(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusCreated).JSON(uploadDTO)
 }
 
+// @Summary      Request upload URL for an image
+// @Description  Get a presigned PUT URL for an avatar/thumbnail/post image plus the public URL it will be served from
+// @Tags         Uploads
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body request.CreateImageUpload true "Image Upload Request"
+// @Success      201 {object} response.ImageUploadResponse
+// @Failure      400 {object} response.Error
+// @Failure      500 {object} response.Error
+// @Router       /v1/uploads/image-url [post]
+func (r *V1) createImageUpload(ctx *fiber.Ctx) error {
+	var body request.CreateImageUpload
+	if err := ctx.BodyParser(&body); err != nil {
+		r.l.Error(err, "restapi - v1 - createImageUpload")
+		return errorResponse(ctx, http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := r.v.Struct(body); err != nil {
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+
+	uploadDTO, err := r.vd.CreateImageUpload(ctx.UserContext(), getUserID(ctx), body)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - createImageUpload")
+		if errors.Is(err, entity.ErrUnsupportedImageFormat) {
+			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to create image upload")
+	}
+
+	return ctx.Status(http.StatusCreated).JSON(uploadDTO)
+}
+
 // @Summary      Confirm raw video upload
 // @Description  Confirm that video file upload to S3 is complete and trigger transcode worker
 // @Tags         Studio
@@ -213,6 +247,9 @@ func (r *V1) confirmVideoUpload(ctx *fiber.Ctx) error {
 		}
 		if errors.Is(err, entity.ErrVideoNotFound) {
 			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
+		if errors.Is(err, entity.ErrTranscodeQueueUnavailable) {
+			return errorResponse(ctx, http.StatusServiceUnavailable, entity.ErrTranscodeQueueUnavailable.Error())
 		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to confirm upload")
 	}
@@ -246,44 +283,78 @@ func (r *V1) listStudioVideos(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(pageDTO)
 }
 
-// @Summary      Publish studio video
-// @Description  Set video visibility to public
-// @Tags         Studio
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        id path string true "Video ID"
-// @Success      200 {object} response.VideoResponse
-// @Failure      500 {object} response.Error
-// @Router       /v1/studio/videos/{id}/publish [post]
-func (r *V1) transcodeCallback(ctx *fiber.Ctx) error {
-	var body request.TranscodeCallback
+// transcodeWebhookResponse is the reply to a transcode webhook: applied=false
+// with a reason is a successful no-op (docs/message-contract.md §4.4).
+type transcodeWebhookResponse struct {
+	Applied bool   `json:"applied"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// transcodeWebhook receives signed status events from the transcode worker
+// (POST /internal/webhooks/transcode). The signature is checked by
+// middleware.RequireWebhookSignature before this runs.
+func (r *V1) transcodeWebhook(ctx *fiber.Ctx) error {
+	key := ctx.Get("Idempotency-Key")
+	if key == "" {
+		return errorResponse(ctx, http.StatusBadRequest, "Idempotency-Key header required")
+	}
+
+	var body request.TranscodeWebhook
 	if err := ctx.BodyParser(&body); err != nil {
 		return errorResponse(ctx, http.StatusBadRequest, "invalid payload")
 	}
-
 	if err := r.v.Struct(body); err != nil {
 		return errorResponse(ctx, http.StatusBadRequest, err.Error())
 	}
 
-	ownerID, err := r.vd.HandleTranscodeCallback(ctx.UserContext(), body.VideoID, body.Status, body.HLSMasterURL)
+	ev := entity.TranscodeEvent{
+		IdempotencyKey: key,
+		JobID:          body.JobID,
+		VideoID:        body.VideoID,
+		Status:         entity.TranscodeEventStatus(body.Status),
+		HLSMasterURL:   body.HLSMasterURL,
+		ErrorMessage:   body.ErrorMessage,
+	}
+
+	res, err := r.vd.HandleTranscodeEvent(ctx.UserContext(), ev)
 	if err != nil {
-		r.l.Error(err, "restapi - v1 - transcodeCallback")
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
+		if errors.Is(err, entity.ErrInvalidIdempotencyKey) {
+			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
+		r.l.Error(err, "restapi - v1 - transcodeWebhook")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to update transcode status")
 	}
 
-	// Push the status change to the owner's open Studio tabs only.
-	if r.hub != nil {
-		r.hub.Broadcast(events.VideoEvent{
-			UserID:  ownerID,
-			VideoID: body.VideoID,
-			Status:  body.Status,
-			HLSUrl:  body.HLSMasterURL,
-		})
+	if res.Applied {
+		r.broadcastTranscodeStatus(res.Before.UserID, ev)
 	}
 
-	return ctx.Status(http.StatusOK).JSON(fiber.Map{
-		"message": "Transcode status updated successfully",
+	return ctx.Status(http.StatusOK).JSON(transcodeWebhookResponse{Applied: res.Applied, Reason: res.Reason})
+}
+
+// broadcastTranscodeStatus pushes an applied transcode event to the owner's
+// open Studio tabs (SSE), as the video status the frontend knows.
+func (r *V1) broadcastTranscodeStatus(ownerID string, ev entity.TranscodeEvent) {
+	if r.hub == nil {
+		return
+	}
+
+	status := entity.VideoStatusProcessing
+	switch ev.Status {
+	case entity.TranscodeEventCompleted:
+		status = entity.VideoStatusComplete
+	case entity.TranscodeEventFailed:
+		status = entity.VideoStatusFailed
+	}
+
+	r.hub.Broadcast(events.VideoEvent{
+		UserID:  ownerID,
+		VideoID: ev.VideoID,
+		Status:  string(status),
+		HLSUrl:  ev.HLSMasterURL,
 	})
 }
 
@@ -332,6 +403,16 @@ func (r *V1) sseVideoEvents(ctx *fiber.Ctx) error {
 	return nil
 }
 
+// @Summary      Publish studio video
+// @Description  Set video visibility to public
+// @Tags         Studio
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Video ID"
+// @Success      200 {object} response.VideoResponse
+// @Failure      500 {object} response.Error
+// @Router       /v1/studio/videos/{id}/publish [post]
 func (r *V1) publishVideo(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
 	userID := getUserID(ctx)
@@ -345,15 +426,43 @@ func (r *V1) publishVideo(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(resDTO)
 }
 
+// @Summary      Start a view session
+// @Description  Called when playback starts. Returns a one-time ticket to redeem at POST /videos/{id}/views after at least min_watch_seconds of watching; the wait is checked on the server clock.
+// @Tags         Video
+// @Produce      json
+// @Param        id path string true "Video ID"
+// @Success      200 {object} response.ViewSessionResponse
+// @Failure      404 {object} response.Error
+// @Router       /v1/videos/{id}/view-session [post]
+func (r *V1) startViewSession(ctx *fiber.Ctx) error {
+	videoID := ctx.Params("id")
+	userID, _ := ctx.Locals("userID").(string)
+
+	ticket, err := r.vd.StartViewSession(ctx.UserContext(), videoID, userID)
+	if err != nil {
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "video not found")
+		}
+		r.l.Error(err, "restapi - v1 - startViewSession")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to start view session")
+	}
+
+	return ctx.Status(http.StatusOK).JSON(response.ViewSessionResponse{
+		Ticket:          ticket,
+		MinWatchSeconds: int(entity.MinWatchForView.Seconds()),
+	})
+}
+
 // @Summary      Record video view count
-// @Description  Increment video view count after >10s playback with IP + Device deduplication (TTL 60s)
+// @Description  Redeem a view-session ticket once the viewer has watched long enough (>=10s, checked server-side); then counts 1 view with IP + device deduplication (60s) and a per-IP hourly cap
 // @Tags         Video
 // @Accept       json
 // @Produce      json
 // @Param        id path string true "Video ID"
+// @Param        request body request.RecordView true "View ticket"
 // @Success      200 {object} response.RecordViewResponse
 // @Failure      400 {object} response.Error
-// @Failure      500 {object} response.Error
+// @Failure      425 {object} response.Error "minimum watch time not reached yet"
 // @Router       /v1/videos/{id}/views [post]
 func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
 	videoID := ctx.Params("id")
@@ -361,32 +470,29 @@ func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "video id required")
 	}
 
-	if ok, err := r.videoViewable(ctx, videoID); !ok {
-		return err
-	}
+	// The ticket may be missing: RecordView checks the video is viewable
+	// first (404 for a private one) and only then rejects the ticket.
+	var body request.RecordView
+	_ = ctx.BodyParser(&body)
 
 	// ctx.IP() only honours X-Forwarded-For from HTTP_TRUSTED_PROXIES (see
 	// httpserver config); reading the header directly would let any client
 	// pick a fresh fake IP per request and bypass view dedup.
 	clientIP := ctx.IP()
 
-	deviceID := ctx.Get("X-Device-ID")
-	if deviceID == "" {
-		deviceID = ctx.Get("User-Agent")
-	}
-
-	recorded, newViews, err := r.vd.RecordView(ctx.UserContext(), videoID, clientIP, deviceID)
+	recorded, newViews, err := r.vd.RecordView(ctx.UserContext(), videoID, body.Ticket, getUserID(ctx), clientIP, ctx.Get("User-Agent"))
 	if err != nil {
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "video not found")
+		}
+		if errors.Is(err, entity.ErrViewTicketTooEarly) {
+			return errorResponse(ctx, http.StatusTooEarly, err.Error())
+		}
+		if errors.Is(err, entity.ErrViewTicketInvalid) {
+			return errorResponse(ctx, http.StatusBadRequest, "view ticket required (POST /videos/{id}/view-session first): "+err.Error())
+		}
 		r.l.Error(err, "restapi - v1 - recordVideoView")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to record video view")
-	}
-
-	// Best-effort: only logged-in viewers (real userID from OptionalAuth) get a
-	// watch-history entry; anonymous views never had one, so this is additive.
-	if userID, ok := ctx.Locals("userID").(string); ok && userID != "" {
-		if err := r.hs.RecordWatch(ctx.UserContext(), userID, videoID, 0); err != nil {
-			r.l.Error(err, "restapi - v1 - recordVideoView - RecordWatch")
-		}
 	}
 
 	return ctx.Status(http.StatusOK).JSON(response.RecordViewResponse{
@@ -531,6 +637,9 @@ func (r *V1) retryTranscode(ctx *fiber.Ctx) error {
 		}
 		if errors.Is(err, entity.ErrVideoNotFailed) {
 			return errorResponse(ctx, http.StatusConflict, err.Error())
+		}
+		if errors.Is(err, entity.ErrTranscodeQueueUnavailable) {
+			return errorResponse(ctx, http.StatusServiceUnavailable, entity.ErrTranscodeQueueUnavailable.Error())
 		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to retry transcode")
 	}

@@ -1,0 +1,25 @@
+# Dockerfile.sync — backend binary with FFmpeg bundled for TRANSCODE_MODE=sync.
+# Build: docker build -f Dockerfile.sync -t pipevid-app-sync .
+
+# ── Stage 1: Go modules cache ────────────────────────────────────────────────
+FROM golang:1.26-alpine3.23 AS modules
+COPY go.mod go.sum /modules/
+WORKDIR /modules
+RUN go mod download
+
+# ── Stage 2: Builder ─────────────────────────────────────────────────────────
+FROM golang:1.26-alpine3.23 AS builder
+COPY --from=modules /go/pkg /go/pkg
+COPY . /app
+WORKDIR /app
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -tags migrate -o /bin/app ./cmd/app
+
+# ── Stage 3: Runtime with FFmpeg ─────────────────────────────────────────────
+FROM alpine:3.20
+RUN apk add --no-cache ffmpeg ca-certificates tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+COPY --from=builder /app/config /config
+COPY --from=builder /app/migrations /migrations
+COPY --from=builder /bin/app /app
+CMD ["/app"]

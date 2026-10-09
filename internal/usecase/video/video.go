@@ -14,35 +14,202 @@ import (
 	"github.com/evrone/go-clean-template/internal/repo"
 	"github.com/evrone/go-clean-template/internal/repo/persistent/view"
 	"github.com/evrone/go-clean-template/internal/usecase"
+	"github.com/evrone/go-clean-template/internal/usecase/transcodejob"
 	"github.com/evrone/go-clean-template/pkg/nats"
 	"github.com/google/uuid"
 )
 
 type UseCase struct {
-	repo          repo.VideoRepo
-	viewRepo      *view.Repo
-	likeRepo      repo.LikeRepo
-	savedRepo     repo.SavedVideoRepo
-	natsPublisher *nats.Publisher
-	notifUc       usecase.Notification
+	repo      repo.VideoRepo
+	viewRepo  *view.Repo
+	likeRepo  repo.LikeRepo
+	savedRepo repo.SavedVideoRepo
+	jobs      *transcodejob.Enqueuer
+	notifUc   usecase.Notification
+	viewPub   ViewPublisher
+	
+	ticketWaitDisabled bool
+
+	// uploadBaseURL is the object-store address the browser uploads to.
+	uploadBaseURL string
+
+	// uploadSigner, when set, replaces the bare upload URL with a presigned one.
+	uploadSigner UploadSigner
+	rawBucket    string
+
+	// publicBucket is the anonymously readable bucket for user-facing images.
+	publicBucket string
 }
 
-func New(r repo.VideoRepo, vRepo *view.Repo, likeRepo repo.LikeRepo, savedRepo repo.SavedVideoRepo, natsPub *nats.Publisher, notifUc usecase.Notification) *UseCase {
+// UploadSigner issues presigned PUT URLs for the raw-videos bucket.
+type UploadSigner interface {
+	PresignPut(ctx context.Context, bucket, objectKey string, expiry time.Duration) (string, error)
+}
+
+// uploadURLTTL is how long a presigned upload URL stays valid: long enough for
+// a large upload on a slow link, short enough that a leaked URL expires.
+const uploadURLTTL = 2 * time.Hour
+
+// imageUploadURLTTL is short: images are small and uploaded right away.
+const imageUploadURLTTL = 15 * time.Minute
+
+// defaultPublicBucket matches MINIO_PUBLIC_BUCKET's default.
+const defaultPublicBucket = "public-assets"
+
+// WithUploadSigner makes CreateUpload return presigned URLs for bucket.
+func (u *UseCase) WithUploadSigner(s UploadSigner, bucket string) *UseCase {
+	u.uploadSigner = s
+	u.rawBucket = bucket
+	return u
+}
+
+// WithPublicBucket sets the anonymously readable bucket that CreateImageUpload
+// writes to (MINIO_PUBLIC_BUCKET).
+func (u *UseCase) WithPublicBucket(bucket string) *UseCase {
+	u.publicBucket = bucket
+	return u
+}
+
+// defaultUploadBaseURL is the local MinIO of the dev stack.
+const defaultUploadBaseURL = "http://localhost:9000"
+
+// WithUploadBaseURL sets the public address of the object store used in the
+// upload URLs (MINIO_PUBLIC_URL); needed whenever the browser is not on the
+// same machine as MinIO.
+func (u *UseCase) WithUploadBaseURL(base string) *UseCase {
+	u.uploadBaseURL = strings.TrimRight(base, "/")
+	return u
+}
+
+// ViewPublisher announces new view totals (docs/message-contract.md §2.3).
+type ViewPublisher interface {
+	PublishViewUpdated(ev nats.ViewUpdated) error
+}
+
+// WithViewPublisher enables live view-count announcements.
+func (u *UseCase) WithViewPublisher(p ViewPublisher) *UseCase {
+	u.viewPub = p
+	return u
+}
+
+// DisableTicketWait is for BENCHMARK_MODE only.
+func (u *UseCase) DisableTicketWait() {
+	u.ticketWaitDisabled = true
+}
+
+func New(r repo.VideoRepo, vRepo *view.Repo, likeRepo repo.LikeRepo, savedRepo repo.SavedVideoRepo, jobs *transcodejob.Enqueuer, notifUc usecase.Notification) *UseCase {
 	return &UseCase{
-		repo:          r,
-		viewRepo:      vRepo,
-		likeRepo:      likeRepo,
-		savedRepo:     savedRepo,
-		natsPublisher: natsPub,
-		notifUc:       notifUc,
+		repo:      r,
+		viewRepo:  vRepo,
+		likeRepo:  likeRepo,
+		savedRepo: savedRepo,
+		jobs:      jobs,
+		notifUc:   notifUc,
 	}
 }
 
-func (u *UseCase) RecordView(ctx context.Context, videoID, clientIP, deviceID string) (bool, int64, error) {
-	if u.viewRepo == nil {
-		return false, 0, nil
+// StartViewSession is called when playback starts: it returns a one-time
+// ticket the client redeems via RecordView after entity.MinWatchForView of
+// watching. userID may be "" (anonymous viewers count too).
+func (u *UseCase) StartViewSession(ctx context.Context, videoID, userID string) (string, error) {
+	if err := u.EnsureViewable(ctx, videoID, userID); err != nil {
+		return "", err
 	}
-	return u.viewRepo.RecordView(ctx, videoID, clientIP, deviceID)
+	if u.viewRepo == nil {
+		return "", fmt.Errorf("VideoUseCase - StartViewSession: view counter unavailable")
+	}
+	return u.viewRepo.IssueViewTicket(ctx, videoID)
+}
+
+// RecordView redeems a view ticket (enforcing the minimum watch time on the
+// server clock) and counts the view, one per viewer per video per 60 s
+// (view.ViewerID). It returns the video's total views — synced plus pending —
+// and, when the view counted, announces that total on video.views.updated
+// for the live WebSocket counters.
+func (u *UseCase) RecordView(ctx context.Context, videoID, ticket, userID, clientIP, userAgent string) (bool, int64, error) {
+	// Viewability first: a private video answers 404 whether or not the
+	// caller holds a ticket, so its existence doesn't leak.
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return false, 0, err
+	}
+	if !v.ViewableBy(userID) {
+		return false, 0, entity.ErrVideoNotFound
+	}
+	if u.viewRepo == nil {
+		return false, v.Views, nil
+	}
+
+	minWatch := entity.MinWatchForView
+	if u.ticketWaitDisabled {
+		minWatch = 0
+	}
+	if err := u.viewRepo.RedeemViewTicket(ctx, ticket, videoID, minWatch); err != nil {
+		return false, 0, err
+	}
+
+	recorded, _, err := u.viewRepo.RecordView(ctx, videoID, userID, clientIP, userAgent)
+	if err != nil {
+		return false, 0, err
+	}
+
+	total := v.Views + u.viewRepo.GetPendingViewsForVideo(ctx, videoID)
+	if recorded && u.viewPub != nil {
+		// Best effort: the view is counted either way; only the live
+		// counter update is lost if NATS is down.
+		_ = u.viewPub.PublishViewUpdated(nats.ViewUpdated{VideoID: videoID, TotalViews: total, TS: time.Now().UnixMilli()})
+	}
+	return recorded, total, nil
+}
+
+// CurrentViews is the total a watch page shows on connect: synced views in
+// PostgreSQL plus those still pending in Redis.
+func (u *UseCase) CurrentViews(ctx context.Context, videoID, userID string) (int64, error) {
+	v, err := u.repo.GetByID(ctx, videoID)
+	if err != nil {
+		return 0, err
+	}
+	if !v.ViewableBy(userID) {
+		return 0, entity.ErrVideoNotFound
+	}
+	if u.viewRepo == nil {
+		return v.Views, nil
+	}
+	return v.Views + u.viewRepo.GetPendingViewsForVideo(ctx, videoID), nil
+}
+
+// CreateImageUpload issues an upload URL for a user-facing image (avatar,
+// thumbnail, post image). Unlike CreateUpload it creates no video row and the
+// object lands in the public bucket, so the returned public_url is readable
+// by anyone, logged in or not.
+func (u *UseCase) CreateImageUpload(ctx context.Context, userID string, req request.CreateImageUpload) (response.ImageUploadResponse, error) {
+	ext := strings.ToLower(filepath.Ext(req.FileName))
+	if !entity.AllowedImageExtensions[ext] {
+		return response.ImageUploadResponse{}, entity.ErrUnsupportedImageFormat
+	}
+
+	bucket := u.publicBucket
+	if bucket == "" {
+		bucket = defaultPublicBucket
+	}
+	base := u.uploadBaseURL
+	if base == "" {
+		base = defaultUploadBaseURL
+	}
+
+	key := fmt.Sprintf("images/%s/%s%s", userID, uuid.New().String(), ext)
+	publicURL := fmt.Sprintf("%s/%s/%s", base, bucket, key)
+
+	uploadURL := publicURL
+	if u.uploadSigner != nil {
+		signed, err := u.uploadSigner.PresignPut(ctx, bucket, key, imageUploadURLTTL)
+		if err != nil {
+			return response.ImageUploadResponse{}, fmt.Errorf("VideoUseCase - CreateImageUpload - PresignPut: %w", err)
+		}
+		uploadURL = signed
+	}
+
+	return response.ImageUploadResponse{UploadUrl: uploadURL, PublicUrl: publicURL}, nil
 }
 
 func (u *UseCase) CreateUpload(ctx context.Context, userID string, req request.CreateVideoUpload) (response.UploadUrlResponse, error) {
@@ -65,8 +232,21 @@ func (u *UseCase) CreateUpload(ctx context.Context, userID string, req request.C
 		return response.UploadUrlResponse{}, fmt.Errorf("VideoUseCase - CreateUpload - Store: %w", err)
 	}
 
-	// Presigned S3 upload URL for local MinIO S3 bucket raw-videos
-	presignedUrl := fmt.Sprintf("http://localhost:9000/raw-videos/%s", s3Key)
+	// Upload URL for the raw-videos bucket, as the browser reaches MinIO.
+	var presignedUrl string
+	if u.uploadSigner != nil {
+		signed, err := u.uploadSigner.PresignPut(ctx, u.rawBucket, s3Key, uploadURLTTL)
+		if err != nil {
+			return response.UploadUrlResponse{}, fmt.Errorf("VideoUseCase - CreateUpload - PresignPut: %w", err)
+		}
+		presignedUrl = signed
+	} else {
+		base := u.uploadBaseURL
+		if base == "" {
+			base = defaultUploadBaseURL
+		}
+		presignedUrl = fmt.Sprintf("%s/raw-videos/%s", base, s3Key)
+	}
 
 	return response.UploadUrlResponse{
 		VideoID:   videoID,
@@ -89,18 +269,22 @@ func (u *UseCase) ConfirmUpload(ctx context.Context, userID string, req request.
 		return mapper.ToVideoResponse(v), nil
 	}
 
-	v.Status = entity.VideoStatusProcessing
-	v.UpdatedAt = time.Now().UTC()
-
-	if err := u.repo.Update(ctx, &v); err != nil {
-		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - ConfirmUpload - Update: %w", err)
+	// Enqueue only succeeds from pending, so two racing confirms still queue
+	// one job; if the queue is down the video stays pending and the error
+	// reaches the client, which can confirm again.
+	if _, _, err := u.jobs.Enqueue(ctx, v.ID, v.RawS3Key, entity.VideoStatusPending); err != nil {
+		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - ConfirmUpload - Enqueue: %w", err)
 	}
 
-	// Publish NATS JetStream event 'video.transcode' for Transcode Worker
-	if u.natsPublisher != nil {
-		_ = u.natsPublisher.PublishTranscodeJob(v.ID, v.RawS3Key, userID)
-	}
+	return u.reload(ctx, v.ID)
+}
 
+// reload re-reads a video after a conditional update and maps it.
+func (u *UseCase) reload(ctx context.Context, id string) (response.VideoResponse, error) {
+	v, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return response.VideoResponse{}, err
+	}
 	return mapper.ToVideoResponse(v), nil
 }
 
@@ -428,19 +612,16 @@ func (u *UseCase) RetryTranscode(ctx context.Context, userID, videoID string) (r
 		return response.VideoResponse{}, entity.ErrVideoNotFailed
 	}
 
-	v.Status = entity.VideoStatusProcessing
-	v.UpdatedAt = time.Now().UTC()
-	if err := u.repo.Update(ctx, &v); err != nil {
-		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - RetryTranscode - Update: %w", err)
+	_, queued, err := u.jobs.Enqueue(ctx, v.ID, v.RawS3Key, entity.VideoStatusFailed)
+	if err != nil {
+		return response.VideoResponse{}, fmt.Errorf("VideoUseCase - RetryTranscode - Enqueue: %w", err)
+	}
+	if !queued {
+		// Someone else retried it between our read and the update.
+		return response.VideoResponse{}, entity.ErrVideoNotFailed
 	}
 
-	if u.natsPublisher != nil {
-		if err := u.natsPublisher.PublishTranscodeJob(v.ID, v.RawS3Key, userID); err != nil {
-			return response.VideoResponse{}, fmt.Errorf("VideoUseCase - RetryTranscode - PublishTranscodeJob: %w", err)
-		}
-	}
-
-	return mapper.ToVideoResponse(v), nil
+	return u.reload(ctx, v.ID)
 }
 
 func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error {
@@ -454,49 +635,26 @@ func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error
 	return u.repo.Delete(ctx, videoID)
 }
 
-// HandleTranscodeCallback applies a transcode worker result and returns the
-// video's owner ID (so the caller can route the SSE status event to them).
-// It is idempotent: NATS may redeliver a job, so a repeated "complete" for an
-// already-complete video is a no-op, and a banned video is never revived.
-func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, hlsMasterURL string) (string, error) {
-	v, err := u.repo.GetByID(ctx, videoID)
+// HandleTranscodeEvent applies one transcode event (webhook or DLQ) exactly
+// once — see docs/message-contract.md §4.3. NATS delivers at least once, so
+// duplicates, stale jobs and backwards moves come back as no-op results, not
+// errors. res.Before.UserID is the owner, for routing the SSE status event.
+func (u *UseCase) HandleTranscodeEvent(ctx context.Context, ev entity.TranscodeEvent) (entity.TranscodeEventResult, error) {
+	if err := entity.ValidateTranscodeEvent(ev); err != nil {
+		return entity.TranscodeEventResult{}, err
+	}
+
+	res, err := u.repo.ApplyTranscodeEvent(ctx, ev, time.Now().UTC())
 	if err != nil {
-		return "", fmt.Errorf("VideoUseCase - HandleTranscodeCallback - GetByID: %w", err)
-	}
-
-	if v.Status == entity.VideoStatusBanned {
-		return v.UserID, nil
-	}
-
-	wasComplete := v.Status == entity.VideoStatusComplete
-	if wasComplete && status == "complete" && (hlsMasterURL == "" || hlsMasterURL == v.HLSUrl) {
-		return v.UserID, nil
-	}
-	// A late "failed" from a redelivered attempt must not clobber a video
-	// that another attempt already finished successfully.
-	if wasComplete && status == "failed" {
-		return v.UserID, nil
-	}
-
-	if status == "complete" {
-		v.Status = entity.VideoStatusComplete
-		if hlsMasterURL != "" {
-			v.HLSUrl = hlsMasterURL
-		}
-	} else if status == "failed" {
-		v.Status = entity.VideoStatusFailed
-	}
-
-	v.UpdatedAt = time.Now().UTC()
-	if err := u.repo.Update(ctx, &v); err != nil {
-		return "", err
+		return entity.TranscodeEventResult{}, fmt.Errorf("VideoUseCase - HandleTranscodeEvent - ApplyTranscodeEvent: %w", err)
 	}
 
 	// Notify followers once a public video is actually watchable — not at
 	// upload time (PublishVideo's own notify only fires when a private/
 	// unlisted video is switched to public, which doesn't cover the default
 	// public-on-upload flow this transcode completion always goes through).
-	if u.notifUc != nil && status == "complete" && !wasComplete && v.Visibility == entity.VideoVisibilityPublic {
+	v := res.Before
+	if u.notifUc != nil && res.Applied && ev.Status == entity.TranscodeEventCompleted && v.Visibility == entity.VideoVisibilityPublic {
 		go func() {
 			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -511,5 +669,5 @@ func (u *UseCase) HandleTranscodeCallback(ctx context.Context, videoID, status, 
 		}()
 	}
 
-	return v.UserID, nil
+	return res, nil
 }
