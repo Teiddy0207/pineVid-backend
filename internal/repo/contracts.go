@@ -138,6 +138,7 @@ type (
 		IncrementHeart(ctx context.Context, streamID string) (int64, error)
 		GetLikeCount(ctx context.Context, videoID string) (int64, error)
 		IsLikedByUser(ctx context.Context, videoID, userID string) (bool, error)
+		GetLikeInfo(ctx context.Context, videoIDs []string, userID string) (counts map[string]int64, liked map[string]bool, err error)
 	}
 
 	// SavedVideoRepo -.

@@ -397,7 +397,41 @@ func (u *UseCase) GetTrending(ctx context.Context, window, userID string, page, 
 // Falls back to the newest reels by recency (a plain SQL-paginated query,
 // not limited by trendingScanLimit) whenever Redis has no ranked IDs yet, or
 // when none of the currently-trending videos happen to be reels.
+//
+// Each reel carries LikesCount/IsLiked for userID: the reels UI toggles the
+// heart from is_liked, so leaving it false on an already-liked reel made the
+// next tap silently unlike it.
 func (u *UseCase) GetReelsFeed(ctx context.Context, userID, window string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
+	res, err := u.getReelsFeed(ctx, window, page, limit)
+	if err != nil {
+		return res, err
+	}
+	u.withLikeInfo(ctx, res.Data, userID)
+	return res, nil
+}
+
+// withLikeInfo fills LikesCount/IsLiked on a page of videos in place with
+// one batched query. Best-effort, like GetByID: a failure leaves the zero
+// values rather than failing the whole page.
+func (u *UseCase) withLikeInfo(ctx context.Context, videos []response.VideoResponse, userID string) {
+	if u.likeRepo == nil || len(videos) == 0 {
+		return
+	}
+	ids := make([]string, len(videos))
+	for i := range videos {
+		ids[i] = videos[i].ID
+	}
+	counts, liked, err := u.likeRepo.GetLikeInfo(ctx, ids, userID)
+	if err != nil {
+		return
+	}
+	for i := range videos {
+		videos[i].LikesCount = counts[videos[i].ID]
+		videos[i].IsLiked = liked[videos[i].ID]
+	}
+}
+
+func (u *UseCase) getReelsFeed(ctx context.Context, window string, page, limit int) (response.PageResponse[response.VideoResponse], error) {
 	days := 1
 	if window == "7d" {
 		days = 7

@@ -25,9 +25,11 @@ func New(pg *postgres.Postgres, rdb *redispkg.Redis) *Repo {
 	}
 }
 
-// ToggleLike toggles like status for a video and updates Redis counter
+// ToggleLike flips the user's like on a video and returns the new liked
+// state plus the total recounted from Postgres. The total deliberately isn't
+// a Redis INCR/DECR counter: that counter was never seeded from Postgres, so
+// it drifted from the GET /videos/:id count (e.g. 50 seeded likes → "1").
 func (r *Repo) ToggleLike(ctx context.Context, l *entity.VideoLike) (bool, int64, error) {
-	// Check if already liked
 	sql, args, err := r.Builder.
 		Select("id").
 		From("likes").
@@ -39,51 +41,35 @@ func (r *Repo) ToggleLike(ctx context.Context, l *entity.VideoLike) (bool, int64
 
 	var existingID string
 	err = r.Pool.QueryRow(ctx, sql, args...).Scan(&existingID)
-	liked := false
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, 0, fmt.Errorf("LikeRepo - ToggleLike - QueryRow: %w", err)
+	}
 
-	if err != nil {
-		// Insert new like
+	liked := errors.Is(err, pgx.ErrNoRows)
+	if liked {
 		insSql, insArgs, _ := r.Builder.
 			Insert("likes").
 			Columns("id", "video_id", "user_id", "created_at").
 			Values(l.ID, l.VideoID, l.UserID, time.Now().UTC()).
 			ToSql()
-		_, _ = r.Pool.Exec(ctx, insSql, insArgs...)
-		liked = true
+		if _, err := r.Pool.Exec(ctx, insSql, insArgs...); err != nil {
+			return false, 0, fmt.Errorf("LikeRepo - ToggleLike - Insert: %w", err)
+		}
 	} else {
-		// Delete existing like
 		delSql, delArgs, _ := r.Builder.
 			Delete("likes").
 			Where(squirrel.Eq{"id": existingID}).
 			ToSql()
-		_, _ = r.Pool.Exec(ctx, delSql, delArgs...)
-		liked = false
-	}
-
-	// Update Redis counter
-	var totalLikes int64
-	if r.Redis != nil && r.Redis.Client != nil {
-		key := fmt.Sprintf("video_likes:%s", l.VideoID)
-		if liked {
-			totalLikes, _ = r.Redis.Client.Incr(ctx, key).Result()
-		} else {
-			totalLikes, _ = r.Redis.Client.Decr(ctx, key).Result()
+		if _, err := r.Pool.Exec(ctx, delSql, delArgs...); err != nil {
+			return false, 0, fmt.Errorf("LikeRepo - ToggleLike - Delete: %w", err)
 		}
-	} else {
-		// Fallback query from Postgres
-		countSql, countArgs, _ := r.Builder.
-			Select("COUNT(*)").
-			From("likes").
-			Where(squirrel.Eq{"video_id": l.VideoID}).
-			ToSql()
-		_ = r.Pool.QueryRow(ctx, countSql, countArgs...).Scan(&totalLikes)
 	}
 
-	if totalLikes < 0 {
-		totalLikes = 0
+	total, err := r.GetLikeCount(ctx, l.VideoID)
+	if err != nil {
+		return liked, 0, err
 	}
-
-	return liked, totalLikes, nil
+	return liked, total, nil
 }
 
 // IncrementHeart increases live stream heart counter in Redis
@@ -95,10 +81,7 @@ func (r *Repo) IncrementHeart(ctx context.Context, streamID string) (int64, erro
 	return 1, nil
 }
 
-// GetLikeCount returns the durable like count from Postgres — unlike the
-// Redis counter ToggleLike maintains for fast increments/decrements, this is
-// never reset by a Redis flush, so it's the right source for a fresh page
-// load (GET /videos/:id) rather than the ephemeral cache.
+// GetLikeCount returns the durable like count for one video from Postgres.
 func (r *Repo) GetLikeCount(ctx context.Context, videoID string) (int64, error) {
 	sql, args, err := r.Builder.
 		Select("COUNT(*)").
@@ -142,4 +125,48 @@ func (r *Repo) IsLikedByUser(ctx context.Context, videoID, userID string) (bool,
 		return false, fmt.Errorf("LikeRepo - IsLikedByUser - QueryRow: %w", err)
 	}
 	return true, nil
+}
+
+// GetLikeInfo returns, in one query, the like count of every video in
+// videoIDs and whether userID has liked each one — the batch counterpart of
+// GetLikeCount/IsLikedByUser for list endpoints (reels feed), so a page of N
+// videos costs one round-trip instead of 2N. Videos with no likes are simply
+// absent from both maps; an empty userID never matches, so liked is all false.
+func (r *Repo) GetLikeInfo(ctx context.Context, videoIDs []string, userID string) (map[string]int64, map[string]bool, error) {
+	counts := make(map[string]int64, len(videoIDs))
+	liked := make(map[string]bool, len(videoIDs))
+	if len(videoIDs) == 0 {
+		return counts, liked, nil
+	}
+
+	sql, args, err := r.Builder.
+		Select("video_id", "COUNT(*)").
+		Column(squirrel.Expr("BOOL_OR(user_id = ?)", userID)).
+		From("likes").
+		Where(squirrel.Eq{"video_id": videoIDs}).
+		GroupBy("video_id").
+		ToSql()
+	if err != nil {
+		return nil, nil, fmt.Errorf("LikeRepo - GetLikeInfo - ToSql: %w", err)
+	}
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("LikeRepo - GetLikeInfo - Query: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			videoID string
+			count   int64
+			byUser  bool
+		)
+		if err := rows.Scan(&videoID, &count, &byUser); err != nil {
+			return nil, nil, fmt.Errorf("LikeRepo - GetLikeInfo - Scan: %w", err)
+		}
+		counts[videoID] = count
+		liked[videoID] = byUser
+	}
+	return counts, liked, rows.Err()
 }

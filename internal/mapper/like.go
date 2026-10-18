@@ -3,11 +3,15 @@ package mapper
 import (
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/google/uuid"
 )
 
+// ToLikeEntity builds a new video like. ID must be a plain UUID: likes.id is
+// VARCHAR(64), so the old "userID:videoID" key (73 chars) made every INSERT
+// fail. Uniqueness per user/video is enforced by unique_user_video_like.
 func ToLikeEntity(userID, videoID string) entity.VideoLike {
 	return entity.VideoLike{
-		ID:      userID + ":" + videoID,
+		ID:      uuid.New().String(),
 		VideoID: videoID,
 		UserID:  userID,
 	}
