@@ -1,8 +1,10 @@
 package v1
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -53,9 +55,12 @@ func (r *V1) heartStream(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusBadRequest, "stream id required")
 	}
 
-	resDTO, err := r.lk.HeartStream(ctx.UserContext(), streamID)
+	resDTO, err := r.lk.HeartStream(ctx.UserContext(), streamID, getUserID(ctx))
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - heartStream")
+		if errors.Is(err, entity.ErrLiveEventsUnavailable) {
+			return errorResponse(ctx, http.StatusServiceUnavailable, "hearts are temporarily unavailable, please retry")
+		}
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to send stream heart")
 	}
 

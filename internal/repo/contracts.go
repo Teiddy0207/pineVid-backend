@@ -83,6 +83,42 @@ type (
 		SumActiveViewers(ctx context.Context) (int64, error)
 	}
 
+	// LiveSessionRepo manages per-broadcast session records. Each time a streamer
+	// goes live a new LiveSession is created; the parent Livestream holds only
+	// the stream-key config and channel identity.
+	LiveSessionRepo interface {
+		Store(ctx context.Context, sess *entity.LiveSession) error
+		GetByID(ctx context.Context, id string) (entity.LiveSession, error)
+		// GetCurrentByLivestreamID returns the open session (ended_at IS NULL) for
+		// the given channel, or ErrLiveSessionNotFound if none is active.
+		GetCurrentByLivestreamID(ctx context.Context, livestreamID string) (entity.LiveSession, error)
+		// ListByLivestreamID returns sessions ordered newest-first.
+		ListByLivestreamID(ctx context.Context, livestreamID string, limit, offset int) ([]entity.LiveSession, int, error)
+		// EndSession stamps ended_at on the given session.
+		EndSession(ctx context.Context, id string, endedAt time.Time) error
+		// SetReplayVideo links a replay VOD to the session after DVR processing.
+		SetReplayVideo(ctx context.Context, id, videoID string) error
+	}
+
+	// ChatMessageRepo persists chat lines for replay. Real-time delivery is
+	// handled by ChatHub (in-memory SSE); this repo is the durable store.
+	ChatMessageRepo interface {
+		Store(ctx context.Context, msg *entity.LiveChatMessage) error
+		ListBySessionID(ctx context.Context, sessionID string, limit, offset int) ([]entity.LiveChatMessage, int, error)
+	}
+
+	// LiveEventLog is the durable path for live chat and hearts: events are
+	// appended to a Redis Stream and consumed by the live-agg worker.
+	LiveEventLog interface {
+		AppendChat(ctx context.Context, ev entity.LiveEvent) error
+		// AppendHeart appends the event and bumps the room's running heart
+		// total atomically, returning the new total for the realtime UI.
+		AppendHeart(ctx context.Context, ev entity.LiveEvent) (int64, error)
+		HeartTotal(ctx context.Context, livestreamID string) (int64, error)
+		// ResetHearts zeroes the running total when a new broadcast starts.
+		ResetHearts(ctx context.Context, livestreamID string) error
+	}
+
 	// SubtitleRepo -.
 	SubtitleRepo interface {
 		ReplaceCues(ctx context.Context, videoID string, cues []entity.SubtitleCue) error

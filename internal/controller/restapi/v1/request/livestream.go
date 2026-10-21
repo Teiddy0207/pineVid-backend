@@ -9,7 +9,7 @@ type StreamKeyAuth struct {
 type UpdateLivestreamInfo struct {
 	Title        string `json:"title" validate:"omitempty,min=3,max=255"`
 	Category     string `json:"category"`
-	ThumbnailURL string `json:"thumbnail_url"`
+	ThumbnailURL string `json:"thumbnail_url" validate:"omitempty,url,max=512"`
 }
 
 // SendChatMessage — the sender's name/avatar are taken from the

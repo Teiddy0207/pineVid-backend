@@ -3,11 +3,13 @@ package livestream_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/request"
 	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/evrone/go-clean-template/internal/events"
 	"github.com/evrone/go-clean-template/internal/usecase/livestream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -66,7 +68,7 @@ func (m *MockLivestreamRepo) SumActiveViewers(ctx context.Context) (int64, error
 const testGrace = 50 * time.Millisecond
 
 func newLivestreamUseCase(repo *MockLivestreamRepo) *livestream.UseCase {
-	return livestream.New(repo, nil, nil, nil, nil, nil, nil, nil, "", "", testGrace)
+	return livestream.New(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, "", "", testGrace)
 }
 
 func TestAuthenticateStreamKey_InvalidKey(t *testing.T) {
@@ -137,13 +139,13 @@ func TestSendChatMessage_Validation(t *testing.T) {
 
 	uc := newLivestreamUseCase(new(MockLivestreamRepo))
 
-	_, err := uc.SendChatMessage(context.Background(), "room", "alice", "", "   ")
+	_, err := uc.SendChatMessage(context.Background(), "room", "u-alice", "alice", "", "   ")
 	assert.ErrorIs(t, err, entity.ErrEmptyChatMessage)
 
-	_, err = uc.SendChatMessage(context.Background(), "room", "alice", "", strings.Repeat("x", 501))
+	_, err = uc.SendChatMessage(context.Background(), "room", "u-alice", "alice", "", strings.Repeat("x", 501))
 	assert.ErrorIs(t, err, entity.ErrChatMessageTooLong)
 
-	msg, err := uc.SendChatMessage(context.Background(), "room", "alice", "", "  hi  ")
+	msg, err := uc.SendChatMessage(context.Background(), "room", "u-alice", "alice", "", "  hi  ")
 	require.NoError(t, err)
 	assert.Equal(t, "hi", msg.Text)
 	assert.Equal(t, "alice", msg.User.Name)
@@ -242,4 +244,122 @@ func TestHandleDVRComplete_NoPending_ProcessesImmediately(t *testing.T) {
 	err := uc.HandleDVRComplete(context.Background(), "sk-4")
 
 	assert.ErrorContains(t, err, "DVR pipeline not configured")
+}
+
+func TestUpdateStreamInfo_SavesThumbnailAndKeepsItWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	repo := new(MockLivestreamRepo)
+	uc := newLivestreamUseCase(repo)
+
+	ls := entity.Livestream{ID: "ls-5", UserID: "user-5", Title: "old", Category: "Gaming"}
+	repo.On("GetByUserID", mock.Anything, "user-5").Return(ls, nil)
+	repo.On("Update", mock.Anything, mock.Anything).Return(nil)
+
+	res, err := uc.UpdateStreamInfo(context.Background(), "user-5", request.UpdateLivestreamInfo{
+		Title:        "new title",
+		ThumbnailURL: "https://media.example.com/public-assets/images/cover.jpg",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://media.example.com/public-assets/images/cover.jpg", res.ThumbnailURL)
+	assert.Equal(t, "Gaming", res.Category)
+
+	saved := repo.Calls[1].Arguments.Get(1).(*entity.Livestream)
+	assert.Equal(t, "https://media.example.com/public-assets/images/cover.jpg", saved.ThumbnailURL)
+
+	// Sending only a title must not wipe an existing thumbnail.
+	withThumb := entity.Livestream{ID: "ls-6", UserID: "user-6", ThumbnailURL: "https://media.example.com/c.jpg"}
+	repo.On("GetByUserID", mock.Anything, "user-6").Return(withThumb, nil)
+	res, err = uc.UpdateStreamInfo(context.Background(), "user-6", request.UpdateLivestreamInfo{Title: "only title"})
+	require.NoError(t, err)
+	assert.Equal(t, "https://media.example.com/c.jpg", res.ThumbnailURL)
+}
+
+// fakeLiveEvents records appended events; appendErr makes every append fail.
+type fakeLiveEvents struct {
+	mu        sync.Mutex
+	chats     []entity.LiveEvent
+	appendErr error
+}
+
+func (f *fakeLiveEvents) AppendChat(_ context.Context, ev entity.LiveEvent) error {
+	if f.appendErr != nil {
+		return f.appendErr
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.chats = append(f.chats, ev)
+	return nil
+}
+
+func (f *fakeLiveEvents) AppendHeart(context.Context, entity.LiveEvent) (int64, error) { return 0, nil }
+func (f *fakeLiveEvents) HeartTotal(context.Context, string) (int64, error)            { return 7, nil }
+func (f *fakeLiveEvents) ResetHearts(context.Context, string) error                    { return nil }
+
+func TestSendChatMessage_AppendsToLiveEventsThenBroadcasts(t *testing.T) {
+	t.Parallel()
+
+	hub := events.NewChatHub()
+	log := &fakeLiveEvents{}
+	uc := livestream.New(new(MockLivestreamRepo), nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(log)
+
+	ch, unsub := hub.Subscribe("room")
+	defer unsub()
+
+	_, err := uc.SendChatMessage(context.Background(), "room", "u-alice", "alice", "", "hello")
+	require.NoError(t, err)
+
+	require.Len(t, log.chats, 1)
+	ev := log.chats[0]
+	assert.Equal(t, entity.LiveEventChat, ev.Type)
+	assert.Equal(t, "room", ev.LivestreamID)
+	assert.Equal(t, "u-alice", ev.UserID)
+	assert.Equal(t, "hello", ev.Text)
+	assert.False(t, ev.At.IsZero())
+
+	select {
+	case msg := <-ch:
+		assert.Equal(t, "hello", msg.Text)
+	case <-time.After(time.Second):
+		t.Fatal("chat line was not broadcast")
+	}
+}
+
+func TestSendChatMessage_LogDown_FailsWithoutBroadcast(t *testing.T) {
+	t.Parallel()
+
+	hub := events.NewChatHub()
+	log := &fakeLiveEvents{appendErr: entity.ErrLiveEventsUnavailable}
+	uc := livestream.New(new(MockLivestreamRepo), nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(log)
+
+	ch, unsub := hub.Subscribe("room")
+	defer unsub()
+
+	_, err := uc.SendChatMessage(context.Background(), "room", "u-alice", "alice", "", "hello")
+	assert.ErrorIs(t, err, entity.ErrLiveEventsUnavailable)
+
+	select {
+	case msg := <-ch:
+		t.Fatalf("an unrecorded message was broadcast: %+v", msg)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestSubscribeChat_SendsCurrentHeartTotalFirst(t *testing.T) {
+	t.Parallel()
+
+	hub := events.NewChatHub()
+	uc := livestream.New(new(MockLivestreamRepo), nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(&fakeLiveEvents{})
+
+	ch, unsub, err := uc.SubscribeChat("room")
+	require.NoError(t, err)
+	defer unsub()
+
+	select {
+	case msg := <-ch:
+		assert.Equal(t, "heart_total", msg.Type)
+		assert.EqualValues(t, 7, msg.Value)
+	case <-time.After(time.Second):
+		t.Fatal("no initial heart total")
+	}
 }

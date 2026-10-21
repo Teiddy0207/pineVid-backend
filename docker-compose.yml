@@ -271,12 +271,31 @@ services:
   view-sync:
     container_name: view-sync
     build:
-      context: ../worker
+      context: ../view-sync
       dockerfile: Dockerfile
     environment:
-      REDIS_URL: "redis:6379"
+      # view-sync reads REDIS_ADDR (REDIS_URL was silently ignored)
+      REDIS_ADDR: "redis:6379"
       PG_URL: "postgres://user:${POSTGRES_PASSWORD}@db:5432/db"
       VIEW_SYNC_INTERVAL: "2m"
+    depends_on:
+      - redis
+      - db
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # Consumes the Redis Stream live:events (live chat + hearts) and writes
+  # live_chat_messages / live_session_stats. Scale out with
+  # `docker compose up -d --scale live-agg=2` — replicas share the work via
+  # the consumer group (container_name is omitted so scaling works).
+  live-agg:
+    build:
+      context: ../live-agg
+      dockerfile: Dockerfile
+    environment:
+      REDIS_ADDR: "redis:6379"
+      PG_URL: "postgres://user:${POSTGRES_PASSWORD}@db:5432/db"
     depends_on:
       - redis
       - db

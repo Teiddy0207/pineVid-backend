@@ -16,7 +16,8 @@ func ToLivestreamResponse(ls entity.Livestream) response.LivestreamResponse {
 		},
 		Title:        ls.Title,
 		Category:     ls.Category,
-		IsLive:       ls.IsLive,
+		ThumbnailURL: ls.ThumbnailURL,
+		IsLive:      ls.IsLive,
 		HLSUrl:       ls.HLSUrl,
 		ViewersCount: ls.ViewersCount,
 		StartedAt:    ls.StartedAt,
@@ -63,3 +64,60 @@ func ToChatMessageResponse(msg events.ChatMessage) response.ChatMessageResponse 
 		CreatedAt: msg.CreatedAt,
 	}
 }
+
+func ToLiveSessionResponse(sess entity.LiveSession) response.LiveSessionResponse {
+	res := response.LiveSessionResponse{
+		ID:            sess.ID,
+		LivestreamID:  sess.LivestreamID,
+		Title:         sess.Title,
+		ThumbnailURL:  sess.ThumbnailURL,
+		Category:      sess.Category,
+		StartedAt:     sess.StartedAt,
+		EndedAt:       sess.EndedAt,
+		ReplayVideoID: sess.ReplayVideoID,
+
+		Hearts:         sess.Stats.Hearts,
+		ChatMessages:   sess.Stats.ChatMessages,
+		UniqueChatters: sess.Stats.UniqueChatters,
+	}
+	if sess.EndedAt != nil {
+		dur := int64(sess.EndedAt.Sub(sess.StartedAt).Seconds())
+		res.DurationSecs = &dur
+	}
+	return res
+}
+
+func ToLiveSessionPageResponse(sessions []entity.LiveSession, totalItems, page, limit int) response.PageResponse[response.LiveSessionResponse] {
+	totalPages := 0
+	if limit > 0 {
+		totalPages = (totalItems + limit - 1) / limit
+	}
+	data := make([]response.LiveSessionResponse, len(sessions))
+	for i, s := range sessions {
+		data[i] = ToLiveSessionResponse(s)
+	}
+	return response.PageResponse[response.LiveSessionResponse]{
+		Success: true,
+		Data:    data,
+		Pagination: response.PaginationMeta{
+			TotalItems:  totalItems,
+			TotalPages:  totalPages,
+			CurrentPage: page,
+			Limit:       limit,
+		},
+	}
+}
+
+func ToStoredChatMessageResponse(msg entity.LiveChatMessage) response.ChatMessageResponse {
+	return response.ChatMessageResponse{
+		StreamID: msg.SessionID,
+		Type:     "chat",
+		User: response.ChatUser{
+			Name:   msg.Username,
+			Avatar: msg.Avatar,
+		},
+		Text:      msg.Text,
+		CreatedAt: msg.CreatedAt.Format("15:04:05"),
+	}
+}
+

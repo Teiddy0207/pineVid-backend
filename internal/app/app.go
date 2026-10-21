@@ -22,7 +22,10 @@ import (
 	persistFollowRepo "github.com/evrone/go-clean-template/internal/repo/persistent/follow"
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
+	persistLiveEventRepo "github.com/evrone/go-clean-template/internal/repo/persistent/liveevent"
 	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
+	persistChatMsgRepo   "github.com/evrone/go-clean-template/internal/repo/persistent/chatmessage"
+	persistLiveSessionRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livesession"
 	persistNotifRepo "github.com/evrone/go-clean-template/internal/repo/persistent/notification"
 	persistPostRepo "github.com/evrone/go-clean-template/internal/repo/persistent/post"
 	persistPostLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/postlike"
@@ -99,6 +102,8 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	userRepo := persistUserRepo.New(pg)
 	videoRepo := persistVideoRepo.New(pg)
 	livestreamRepo := persistLivestreamRepo.New(pg)
+	liveSessionRepo := persistLiveSessionRepo.New(pg)
+	chatMsgRepo := persistChatMsgRepo.New(pg)
 	commentRepo := persistCommentRepo.New(pg)
 	commentLikeRepo := persistCommentLikeRepo.New(pg)
 	postRepo := persistPostRepo.New(pg)
@@ -119,6 +124,10 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	}
 	viewRepo := persistViewRepo.New(pg, redisClient)
 	likeRepo := persistLikeRepo.New(pg, redisClient)
+	liveEventLog := persistLiveEventRepo.New(redisClient)
+	if liveEventLog == nil {
+		l.Warn("Redis unavailable: live chat is written to Postgres directly and hearts are not aggregated (live-agg idle)")
+	}
 
 	if cfg.Benchmark.Mode {
 		viewRepo.DisableIPCap()
@@ -179,13 +188,19 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		videoUc.WithUploadSigner(signer, cfg.Minio.RawBucket)
 		l.Info("MINIO_PRESIGN_UPLOADS: browser uploads use presigned PUT URLs")
 	}
-	livestreamUc := livestreamusecase.New(livestreamRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, jobs, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
+	livestreamUc := livestreamusecase.New(livestreamRepo, liveSessionRepo, chatMsgRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, jobs, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
+	if liveEventLog != nil {
+		livestreamUc.WithLiveEvents(liveEventLog)
+	}
 	livestreamUc.StartReconciliationLoop(context.Background(), cfg.SRS.ReconcileInterval)
 	workerRepo := persistWorkerRepo.New(pg)
 	adminStatsRepo := persistAdminStatsRepo.New(pg)
 	userUc := user.New(userRepo, refreshTokenRepo, jwtManager, cfg.JWT.RefreshTokenExpiry)
 	adminUc := adminusecase.New(livestreamRepo, videoRepo, userRepo, workerRepo, adminStatsRepo, livestreamUc, userUc)
 	likeUc := likeusecase.New(likeRepo, natsPub, livestreamUc)
+	if liveEventLog != nil {
+		likeUc.WithLiveEvents(liveEventLog)
+	}
 	commentUc := commentusecase.New(commentRepo, commentLikeRepo, natsPub)
 	postUc := postusecase.New(postRepo, postLikeRepo, notifUc)
 	recUc := recusecase.New(recRepo, videoRepo, userPrefRepo)

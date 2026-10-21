@@ -65,11 +65,19 @@ type (
 		GetStreamByID(ctx context.Context, id string) (response.LivestreamResponse, error)
 		ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error)
 		UpdateStreamInfo(ctx context.Context, userID string, req request.UpdateLivestreamInfo) (response.LivestreamResponse, error)
-		SendChatMessage(ctx context.Context, streamID, username, avatar, text string) (response.ChatMessageResponse, error)
+		SendChatMessage(ctx context.Context, streamID, userID, username, avatar, text string) (response.ChatMessageResponse, error)
 		KickStream(ctx context.Context, streamKey string) error
 		SubscribeChat(streamID string) (<-chan response.ChatMessageResponse, func(), error)
 		ReconcileLiveStreams(ctx context.Context) error
 		BroadcastHeart(streamID string, totalHearts int64)
+		// EndStream lets the streamer end their broadcast from Studio without
+		// having to close OBS. It kicks the RTMP publisher and finalises the
+		// session immediately (bypassing the reconnection grace period).
+		EndStream(ctx context.Context, userID string) error
+		// ListSessions returns the broadcast history for a given channel (livestream ID).
+		ListSessions(ctx context.Context, livestreamID string, page, limit int) (response.PageResponse[response.LiveSessionResponse], error)
+		// GetSessionChatHistory returns the persisted chat log for a past session.
+		GetSessionChatHistory(ctx context.Context, sessionID string, page, limit int) (response.PageResponse[response.ChatMessageResponse], error)
 	}
 
 	// Subtitle -.
@@ -108,7 +116,7 @@ type (
 	// Like -.
 	Like interface {
 		ToggleLikeVideo(ctx context.Context, userID, videoID string) (response.LikeResponse, error)
-		HeartStream(ctx context.Context, streamID string) (response.HeartResponse, error)
+		HeartStream(ctx context.Context, streamID, userID string) (response.HeartResponse, error)
 	}
 
 	// Comment -.

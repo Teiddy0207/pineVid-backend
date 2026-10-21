@@ -21,6 +21,7 @@ type Livestream struct {
 	StreamKey    string `json:"stream_key"`
 	Title        string `json:"title"`
 	Category     string `json:"category"`
+	ThumbnailURL string `json:"thumbnail_url"`
 	IsLive       bool   `json:"is_live"`
 	HLSUrl       string `json:"hls_url"`
 	ViewersCount int64  `json:"viewers_count"`

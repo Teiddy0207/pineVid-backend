@@ -29,13 +29,19 @@ import (
 // filled in if SRS's on_dvr webhook arrives while we're still waiting (which
 // it normally does, since SRS closes the DVR session right after unpublish,
 // well before our grace period elapses).
+// sessionID is the live_sessions PK created when the stream went live; it is
+// carried through to finalizeStreamEnd so the session can be closed correctly.
 type pendingEnd struct {
-	timer   *time.Timer
-	dvrPath string
+	timer     *time.Timer
+	dvrPath   string
+	sessionID string
 }
 
 type UseCase struct {
 	repo          repo.LivestreamRepo
+	sessionRepo   repo.LiveSessionRepo
+	chatMsgRepo   repo.ChatMessageRepo
+	liveEvents    repo.LiveEventLog
 	videoRepo     repo.VideoRepo
 	followRepo    repo.FollowRepo
 	chatHub       *events.ChatHub
@@ -52,17 +58,26 @@ type UseCase struct {
 }
 
 func New(
-	r repo.LivestreamRepo, vr repo.VideoRepo, followRepo repo.FollowRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
+	r repo.LivestreamRepo, sessionRepo repo.LiveSessionRepo, chatMsgRepo repo.ChatMessageRepo,
+	vr repo.VideoRepo, followRepo repo.FollowRepo, chatHub *events.ChatHub, notifUc usecase.Notification,
 	minioClient *pkgminio.Client, jobs *transcodejob.Enqueuer, srsClient *srs.Client, rawBucket, dvrLocalDir string,
 	graceDuration time.Duration,
 ) *UseCase {
 	return &UseCase{
-		repo: r, videoRepo: vr, followRepo: followRepo, chatHub: chatHub, notifUc: notifUc,
+		repo: r, sessionRepo: sessionRepo, chatMsgRepo: chatMsgRepo,
+		videoRepo: vr, followRepo: followRepo, chatHub: chatHub, notifUc: notifUc,
 		minioClient: minioClient, jobs: jobs, srsClient: srsClient,
 		rawBucket: rawBucket, dvrLocalDir: dvrLocalDir,
 		graceDuration: graceDuration,
 		pending:       make(map[string]*pendingEnd),
 	}
+}
+
+// WithLiveEvents routes chat through the Redis Stream consumed by live-agg
+// instead of writing live_chat_messages directly from the request path.
+func (u *UseCase) WithLiveEvents(l repo.LiveEventLog) *UseCase {
+	u.liveEvents = l
+	return u
 }
 
 // withFollowersCount enriches an already-mapped LivestreamResponse with the
@@ -104,6 +119,7 @@ func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.Str
 	}
 
 	return response.StreamKeyResponse{
+		LivestreamID: ls.ID,
 		ServerUrl:    "rtmp://live.pipevid.com/live",
 		StreamKey:    ls.StreamKey,
 		IsLive:       ls.IsLive,
@@ -126,6 +142,7 @@ func (u *UseCase) ResetStreamKey(ctx context.Context, userID string) (response.S
 	}
 
 	return response.StreamKeyResponse{
+		LivestreamID: ls.ID,
 		ServerUrl:    "rtmp://live.pipevid.com/live",
 		StreamKey:    ls.StreamKey,
 		IsLive:       ls.IsLive,
@@ -170,6 +187,27 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 
 	_ = u.repo.Update(ctx, &ls)
 
+	// Create a new LiveSession for this broadcast. Best-effort: a failure here
+	// does not block the RTMP publish; the session simply won't be tracked.
+	if u.sessionRepo != nil {
+		sess := &entity.LiveSession{
+			ID:           uuid.New().String(),
+			LivestreamID: ls.ID,
+			Title:        ls.Title,
+			ThumbnailURL: ls.ThumbnailURL,
+			Category:     ls.Category,
+			StartedAt:    now,
+			CreatedAt:    now,
+		}
+		_ = u.sessionRepo.Store(ctx, sess)
+	}
+
+	// Each broadcast starts its own heart count (a reconnect inside the grace
+	// window keeps the session and never reaches this point).
+	if u.liveEvents != nil {
+		_ = u.liveEvents.ResetHearts(ctx, ls.ID)
+	}
+
 	// Notify followers that this streamer just went live. Best-effort and
 	// async: SRS is waiting on this HTTP response to admit the RTMP publish,
 	// so this must never slow down or fail the auth decision.
@@ -199,8 +237,19 @@ func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamK
 // viewers off or generating a throwaway replay video for the interrupted
 // segment.
 func (u *UseCase) UnpublishStream(ctx context.Context, streamKey string) error {
-	if _, err := u.repo.GetByStreamKey(ctx, streamKey); err != nil {
+	ls, err := u.repo.GetByStreamKey(ctx, streamKey)
+	if err != nil {
 		return err
+	}
+
+	// Snapshot the current session ID before the grace timer fires so that
+	// finalizeStreamEnd knows which session to close even if the DB row
+	// changes in the meantime.
+	var sessionID string
+	if u.sessionRepo != nil {
+		if sess, err := u.sessionRepo.GetCurrentByLivestreamID(ctx, ls.ID); err == nil {
+			sessionID = sess.ID
+		}
 	}
 
 	timer := time.AfterFunc(u.graceDuration, func() {
@@ -211,7 +260,7 @@ func (u *UseCase) UnpublishStream(ctx context.Context, streamKey string) error {
 	if existing, ok := u.pending[streamKey]; ok {
 		existing.timer.Stop()
 	}
-	u.pending[streamKey] = &pendingEnd{timer: timer}
+	u.pending[streamKey] = &pendingEnd{timer: timer, sessionID: sessionID}
 	u.mu.Unlock()
 
 	return nil
@@ -244,8 +293,13 @@ func (u *UseCase) finalizeStreamEnd(streamKey string) {
 	ls.UpdatedAt = now
 	_ = u.repo.Update(ctx, &ls)
 
+	// Close the live session so its ended_at is stamped.
+	if u.sessionRepo != nil && p.sessionID != "" {
+		_ = u.sessionRepo.EndSession(ctx, p.sessionID, now)
+	}
+
 	if p.dvrPath != "" {
-		_ = u.processDVR(ctx, ls, p.dvrPath)
+		_ = u.processDVR(ctx, ls, p.dvrPath, p.sessionID)
 	}
 }
 
@@ -290,7 +344,15 @@ func (u *UseCase) HandleDVRComplete(ctx context.Context, streamKey string) error
 		return fmt.Errorf("LivestreamUseCase - HandleDVRComplete - GetByStreamKey: %w", err)
 	}
 
-	return u.processDVR(ctx, ls, localPath)
+	// Look up the current session to link the DVR recording.
+	var sessionID string
+	if u.sessionRepo != nil {
+		if sess, err := u.sessionRepo.GetCurrentByLivestreamID(ctx, ls.ID); err == nil {
+			sessionID = sess.ID
+		}
+	}
+
+	return u.processDVR(ctx, ls, localPath, sessionID)
 }
 
 // processDVR uploads a finished DVR recording to the raw-videos S3 bucket,
@@ -298,7 +360,7 @@ func (u *UseCase) HandleDVRComplete(ctx context.Context, streamKey string) error
 // reusing the exact same pipeline (and /internal/webhooks/transcode
 // completion webhook) a manual upload goes through, rather than fabricating a
 // "complete" video that points at a file nobody produced.
-func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPath string) error {
+func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPath, sessionID string) error {
 	if u.minioClient == nil || u.jobs == nil || u.videoRepo == nil || u.dvrLocalDir == "" {
 		return errors.New("processDVR: DVR pipeline not configured")
 	}
@@ -324,12 +386,14 @@ func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPat
 		Title:       fmt.Sprintf("[Replay] %s", ls.Title),
 		Description: fmt.Sprintf("Bản ghi hình phát trực tiếp ngày %s", now.Format("02/01/2006 15:04")),
 		Category:    ls.Category,
-		Status:      entity.VideoStatusPending,
-		Visibility:  entity.VideoVisibilityPrivate, // streamer reviews & publishes from Studio
-		RawS3Key:    rawS3Key,
-		Duration:    dvrDuration(ls.StartedAt, now),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		// The cover chosen for the live doubles as the replay's thumbnail.
+		ThumbnailUrl: ls.ThumbnailURL,
+		Status:       entity.VideoStatusPending,
+		Visibility:   entity.VideoVisibilityPrivate, // streamer reviews & publishes from Studio
+		RawS3Key:     rawS3Key,
+		Duration:     dvrDuration(ls.StartedAt, now),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	if err := u.videoRepo.Store(ctx, &replayVideo); err != nil {
@@ -341,6 +405,12 @@ func (u *UseCase) processDVR(ctx context.Context, ls entity.Livestream, localPat
 	if _, _, err := u.jobs.Enqueue(ctx, videoID, rawS3Key, entity.VideoStatusPending); err != nil {
 		_ = u.videoRepo.SetStatus(ctx, videoID, entity.VideoStatusFailed, time.Now().UTC())
 		return fmt.Errorf("LivestreamUseCase - processDVR - Enqueue: %w", err)
+	}
+
+	// Link the replay video to its source live session so the Studio tab
+	// can surface it correctly. Best-effort: a failure here is non-fatal.
+	if u.sessionRepo != nil && sessionID != "" {
+		_ = u.sessionRepo.SetReplayVideo(ctx, sessionID, videoID)
 	}
 
 	return nil
@@ -454,6 +524,9 @@ func (u *UseCase) UpdateStreamInfo(ctx context.Context, userID string, req reque
 	if req.Category != "" {
 		ls.Category = req.Category
 	}
+	if req.ThumbnailURL != "" {
+		ls.ThumbnailURL = req.ThumbnailURL
+	}
 	ls.UpdatedAt = time.Now().UTC()
 
 	if err := u.repo.Update(ctx, &ls); err != nil {
@@ -469,7 +542,12 @@ const maxChatMessageRunes = 500
 // SendChatMessage broadcasts a chat line. username/avatar come from the
 // authenticated account (never from the request body), so a viewer can't
 // post under someone else's name.
-func (u *UseCase) SendChatMessage(ctx context.Context, streamID, username, avatar, text string) (response.ChatMessageResponse, error) {
+//
+// The line is first appended to the live events stream (durable; live-agg
+// persists it to live_chat_messages and updates the session stats) and only
+// then broadcast, so a viewer never sees a message that was not recorded.
+// If the stream is unreachable the send fails with ErrLiveEventsUnavailable.
+func (u *UseCase) SendChatMessage(ctx context.Context, streamID, userID, username, avatar, text string) (response.ChatMessageResponse, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return response.ChatMessageResponse{}, entity.ErrEmptyChatMessage
@@ -485,20 +563,60 @@ func (u *UseCase) SendChatMessage(ctx context.Context, streamID, username, avata
 		avatar = strings.ToUpper(string(r))
 	}
 
+	now := time.Now()
+	if u.liveEvents != nil {
+		if err := u.liveEvents.AppendChat(ctx, entity.LiveEvent{
+			Type:         entity.LiveEventChat,
+			LivestreamID: streamID,
+			UserID:       userID,
+			Username:     username,
+			Avatar:       avatar,
+			Text:         text,
+			At:           now,
+		}); err != nil {
+			return response.ChatMessageResponse{}, err
+		}
+	} else {
+		u.persistChatDirect(streamID, userID, username, avatar, text, now)
+	}
+
 	msg := events.ChatMessage{
 		StreamID:  streamID,
-		Type:      "chat",
+		Type:      entity.LiveEventChat,
 		Username:  username,
 		Avatar:    avatar,
 		Text:      text,
-		CreatedAt: time.Now().Format("15:04:05"),
+		CreatedAt: now.Format("15:04:05"),
 	}
-
 	if u.chatHub != nil {
 		u.chatHub.Broadcast(streamID, msg)
 	}
 
 	return mapper.ToChatMessageResponse(msg), nil
+}
+
+// persistChatDirect is the fallback when Redis is unavailable at startup:
+// write the line straight to Postgres for the open session (best-effort).
+func (u *UseCase) persistChatDirect(streamID, userID, username, avatar, text string, at time.Time) {
+	if u.chatMsgRepo == nil || u.sessionRepo == nil {
+		return
+	}
+	go func() {
+		pCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		sess, err := u.sessionRepo.GetCurrentByLivestreamID(pCtx, streamID)
+		if err != nil {
+			return // no active session — don't persist
+		}
+		_ = u.chatMsgRepo.Store(pCtx, &entity.LiveChatMessage{
+			SessionID: sess.ID,
+			UserID:    userID,
+			Username:  username,
+			Avatar:    avatar,
+			Text:      text,
+			CreatedAt: at.UTC(),
+		})
+	}()
 }
 
 // KickStream force-disconnects the RTMP publisher of streamKey (admin ban).
@@ -538,9 +656,26 @@ func (u *UseCase) SubscribeChat(streamID string) (<-chan response.ChatMessageRes
 	}
 	raw, unsub := u.chatHub.Subscribe(streamID)
 
+	// A viewer joining mid-broadcast gets the current heart total first
+	// ("heart_total": set the counter, no animation) instead of 0.
+	var initial int64
+	if u.liveEvents != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		initial, _ = u.liveEvents.HeartTotal(ctx, streamID)
+		cancel()
+	}
+
 	mapped := make(chan response.ChatMessageResponse)
 	go func() {
 		defer close(mapped)
+		if initial > 0 {
+			mapped <- response.ChatMessageResponse{
+				StreamID:  streamID,
+				Type:      "heart_total",
+				Value:     initial,
+				CreatedAt: time.Now().Format("15:04:05"),
+			}
+		}
 		for msg := range raw {
 			mapped <- mapper.ToChatMessageResponse(msg)
 		}
@@ -548,3 +683,98 @@ func (u *UseCase) SubscribeChat(streamID string) (<-chan response.ChatMessageRes
 
 	return mapped, unsub, nil
 }
+
+// EndStream lets the streamer close their broadcast from Studio without having
+// to close OBS. It kicks the RTMP publisher (which triggers on_unpublish) and
+// then immediately finalises the session, bypassing the reconnection grace
+// period. This matches the "End stream" button behaviour on YouTube.
+func (u *UseCase) EndStream(ctx context.Context, userID string) error {
+	ls, err := u.repo.GetByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !ls.IsLive {
+		return errors.New("stream is not currently live")
+	}
+
+	// Cancel any existing grace-period timer so finalizeStreamEnd doesn't
+	// run twice (once from on_unpublish, once from here).
+	u.mu.Lock()
+	if p, ok := u.pending[ls.StreamKey]; ok {
+		p.timer.Stop()
+		delete(u.pending, ls.StreamKey)
+	}
+	u.mu.Unlock()
+
+	// Kick the RTMP publisher. Best-effort: even if SRS is unreachable we
+	// still want to mark the stream offline in the DB.
+	if u.srsClient != nil {
+		_ = u.srsClient.KickPublisher(ctx, ls.StreamKey)
+	}
+
+	// Look up the current session before we close it.
+	var sessionID string
+	if u.sessionRepo != nil {
+		if sess, err := u.sessionRepo.GetCurrentByLivestreamID(ctx, ls.ID); err == nil {
+			sessionID = sess.ID
+		}
+	}
+
+	// Mark the channel offline immediately.
+	now := time.Now().UTC()
+	ls.IsLive = false
+	ls.EndedAt = &now
+	ls.UpdatedAt = now
+	_ = u.repo.Update(ctx, &ls)
+
+	// Stamp the session's ended_at.
+	if u.sessionRepo != nil && sessionID != "" {
+		_ = u.sessionRepo.EndSession(ctx, sessionID, now)
+	}
+
+	return nil
+}
+
+// ListSessions returns the broadcast history for a given channel (livestream ID),
+// newest-first. This powers the Studio "Past streams" tab.
+func (u *UseCase) ListSessions(ctx context.Context, livestreamID string, page, limit int) (response.PageResponse[response.LiveSessionResponse], error) {
+	offset := (page - 1) * limit
+	sessions, total, err := u.sessionRepo.ListByLivestreamID(ctx, livestreamID, limit, offset)
+	if err != nil {
+		return response.PageResponse[response.LiveSessionResponse]{}, fmt.Errorf("LivestreamUseCase - ListSessions: %w", err)
+	}
+	return mapper.ToLiveSessionPageResponse(sessions, total, page, limit), nil
+}
+
+// GetSessionChatHistory returns the persisted chat log for a past session,
+// oldest-first. Used for replay views in Studio and the VOD watch page.
+func (u *UseCase) GetSessionChatHistory(ctx context.Context, sessionID string, page, limit int) (response.PageResponse[response.ChatMessageResponse], error) {
+	if u.chatMsgRepo == nil {
+		return response.PageResponse[response.ChatMessageResponse]{}, errors.New("chat history unavailable")
+	}
+	offset := (page - 1) * limit
+	messages, total, err := u.chatMsgRepo.ListBySessionID(ctx, sessionID, limit, offset)
+	if err != nil {
+		return response.PageResponse[response.ChatMessageResponse]{}, fmt.Errorf("LivestreamUseCase - GetSessionChatHistory: %w", err)
+	}
+
+	totalPages := 0
+	if limit > 0 {
+		totalPages = (total + limit - 1) / limit
+	}
+	data := make([]response.ChatMessageResponse, len(messages))
+	for i, m := range messages {
+		data[i] = mapper.ToStoredChatMessageResponse(m)
+	}
+	return response.PageResponse[response.ChatMessageResponse]{
+		Success: true,
+		Data:    data,
+		Pagination: response.PaginationMeta{
+			TotalItems:  total,
+			TotalPages:  totalPages,
+			CurrentPage: page,
+			Limit:       limit,
+		},
+	}, nil
+}
+

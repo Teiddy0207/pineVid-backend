@@ -40,13 +40,13 @@ func (r *Repo) Store(ctx context.Context, ls *entity.Livestream) error {
 
 var livestreamSelectColumns = []string{
 	"ls.id", "ls.user_id", "COALESCE(u.username, u.email, 'Streamer')", "COALESCE(u.avatar_url, '')",
-	"ls.stream_key", "ls.title", "ls.category", "ls.is_live", "ls.hls_url", "ls.viewers_count",
+	"ls.stream_key", "ls.title", "ls.category", "ls.thumbnail_url", "ls.is_live", "ls.hls_url", "ls.viewers_count",
 	"ls.started_at", "ls.ended_at", "ls.created_at", "ls.updated_at",
 	"ls.is_banned", "COALESCE(u.is_banned, FALSE)",
 }
 
 func scanLivestream(row pgx.Row, ls *entity.Livestream) error {
-	return row.Scan(&ls.ID, &ls.UserID, &ls.UserName, &ls.UserAvatar, &ls.StreamKey, &ls.Title, &ls.Category, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt, &ls.IsBanned, &ls.OwnerBanned)
+	return row.Scan(&ls.ID, &ls.UserID, &ls.UserName, &ls.UserAvatar, &ls.StreamKey, &ls.Title, &ls.Category, &ls.ThumbnailURL, &ls.IsLive, &ls.HLSUrl, &ls.ViewersCount, &ls.StartedAt, &ls.EndedAt, &ls.CreatedAt, &ls.UpdatedAt, &ls.IsBanned, &ls.OwnerBanned)
 }
 
 func (r *Repo) GetByID(ctx context.Context, id string) (entity.Livestream, error) {
@@ -174,6 +174,7 @@ func (r *Repo) Update(ctx context.Context, ls *entity.Livestream) error {
 		Set("stream_key", ls.StreamKey).
 		Set("title", ls.Title).
 		Set("category", ls.Category).
+		Set("thumbnail_url", ls.ThumbnailURL).
 		Set("is_live", ls.IsLive).
 		Set("hls_url", ls.HLSUrl).
 		Set("viewers_count", ls.ViewersCount).

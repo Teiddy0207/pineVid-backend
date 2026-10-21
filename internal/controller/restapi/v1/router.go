@@ -107,6 +107,8 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 	{
 		livePublicGroup.Get("/streams", r.listActiveStreams)
 		livePublicGroup.Get("/streams/:id", r.getStream)
+		livePublicGroup.Get("/streams/:id/sessions", r.listLiveSessions)
+		livePublicGroup.Get("/sessions/:sessionID/chat", r.getSessionChatHistory)
 		livePublicGroup.Post("/streams/:id/chat", auth, rl.Limit("chat", 20, 30*time.Second), r.sendChatMessage)
 		livePublicGroup.Post("/streams/:id/heart", optionalAuth, rl.Limit("heart", 120, time.Minute), r.heartStream)
 		livePublicGroup.Post("/auth", internalOnly, r.authenticateRTMPStreamKey) // SRS on_publish
@@ -160,6 +162,7 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		studioGroup.Get("/live/key", r.getStreamKey)
 		studioGroup.Post("/live/reset-key", r.resetStreamKey)
 		studioGroup.Put("/live/info", r.updateStreamInfo)
+		studioGroup.Post("/live/end", r.endStream)
 	}
 
 	adminGroup := protected.Group("/admin", middleware.RequireAdmin(r.u))

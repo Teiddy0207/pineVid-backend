@@ -271,7 +271,7 @@ func (r *V1) getChannelDetails(ctx *fiber.Ctx) error {
 		ID:               user.ID,
 		Username:         user.Username,
 		Avatar:           user.Avatar,
-		Bio:              "Verified Content Creator on PipeVid Platform.",
+		Bio:              "",
 		SubscribersCount: subCount,
 		IsFollowing:      isFollowing,
 		TotalVideos:      total,

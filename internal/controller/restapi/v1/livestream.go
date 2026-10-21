@@ -74,7 +74,9 @@ func (r *V1) getStream(ctx *fiber.Ctx) error {
 // @Failure      400 {object} response.Error
 // @Router       /v1/live/streams/{id}/chat [post]
 func (r *V1) sendChatMessage(ctx *fiber.Ctx) error {
-	id := ctx.Params("id")
+	// Copied: the fallback persist path uses it after the handler returns,
+	// when fasthttp may already have reused the Params buffer.
+	id := string([]byte(ctx.Params("id")))
 
 	var req request.SendChatMessage
 	if err := ctx.BodyParser(&req); err != nil {
@@ -92,10 +94,14 @@ func (r *V1) sendChatMessage(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusUnauthorized, "unauthorized")
 	}
 
-	resDTO, err := r.ls.SendChatMessage(ctx.UserContext(), id, user.Username, user.Avatar, req.Text)
+	resDTO, err := r.ls.SendChatMessage(ctx.UserContext(), id, user.ID, user.Username, user.Avatar, req.Text)
 	if err != nil {
 		if errors.Is(err, entity.ErrEmptyChatMessage) || errors.Is(err, entity.ErrChatMessageTooLong) {
 			return errorResponse(ctx, http.StatusBadRequest, err.Error())
+		}
+		if errors.Is(err, entity.ErrLiveEventsUnavailable) {
+			r.l.Error(err, "restapi - v1 - sendChatMessage")
+			return errorResponse(ctx, http.StatusServiceUnavailable, "chat is temporarily unavailable, please retry")
 		}
 		r.l.Error(err, "restapi - v1 - sendChatMessage")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to send chat message")
@@ -286,7 +292,7 @@ func (r *V1) unpublishRTMPStream(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
 }
 
-// @Summary      RTMP DVR-complete webhook
+// @Summary      DVR-complete webhook
 // @Description  Webhook used by SRS Media Server (on_dvr) once a livestream recording has finished writing to disk
 // @Tags         Livestream
 // @Accept       json
@@ -309,3 +315,71 @@ func (r *V1) handleDVRComplete(ctx *fiber.Ctx) error {
 
 	return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
 }
+
+// @Summary      End livestream (Studio)
+// @Description  Streamer explicitly ends their current broadcast from Studio. Kicks the RTMP publisher and finalises the session immediately — no need to close OBS.
+// @Tags         Studio
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {object} map[string]bool
+// @Failure      400 {object} response.Error
+// @Failure      404 {object} response.Error
+// @Router       /v1/studio/live/end [post]
+func (r *V1) endStream(ctx *fiber.Ctx) error {
+	userID := getUserID(ctx)
+	if err := r.ls.EndStream(ctx.UserContext(), userID); err != nil {
+		if errors.Is(err, entity.ErrLivestreamNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "no livestream configured for this account")
+		}
+		r.l.Error(err, "restapi - v1 - endStream")
+		return errorResponse(ctx, http.StatusBadRequest, err.Error())
+	}
+	return ctx.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+}
+
+// @Summary      List broadcast sessions for a channel
+// @Description  Returns the broadcast history (newest-first) for the given livestream channel ID. Powers the Studio "Past streams" tab.
+// @Tags         Livestream
+// @Produce      json
+// @Param        id    path  string  true  "Livestream (channel) ID"
+// @Param        page  query int     false "Page number" default(1)
+// @Param        limit query int     false "Page limit"  default(20)
+// @Success      200 {object} response.PageResponse[response.LiveSessionResponse]
+// @Failure      500 {object} response.Error
+// @Router       /v1/live/streams/{id}/sessions [get]
+func (r *V1) listLiveSessions(ctx *fiber.Ctx) error {
+	livestreamID := ctx.Params("id")
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 20)
+
+	pageDTO, err := r.ls.ListSessions(ctx.UserContext(), livestreamID, page, limit)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - listLiveSessions")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to list sessions")
+	}
+	return ctx.Status(http.StatusOK).JSON(pageDTO)
+}
+
+// @Summary      Get chat history of a live session
+// @Description  Returns the persisted chat log for a past live session, oldest-first. Used for replay views.
+// @Tags         Livestream
+// @Produce      json
+// @Param        sessionID path  string  true  "Live session ID"
+// @Param        page      query int     false "Page number" default(1)
+// @Param        limit     query int     false "Page limit"  default(100)
+// @Success      200 {object} response.PageResponse[response.ChatMessageResponse]
+// @Failure      500 {object} response.Error
+// @Router       /v1/live/sessions/{sessionID}/chat [get]
+func (r *V1) getSessionChatHistory(ctx *fiber.Ctx) error {
+	sessionID := string([]byte(ctx.Params("sessionID")))
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 100)
+
+	pageDTO, err := r.ls.GetSessionChatHistory(ctx.UserContext(), sessionID, page, limit)
+	if err != nil {
+		r.l.Error(err, "restapi - v1 - getSessionChatHistory")
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to get chat history")
+	}
+	return ctx.Status(http.StatusOK).JSON(pageDTO)
+}
+
