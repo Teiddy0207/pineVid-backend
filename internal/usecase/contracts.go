@@ -57,6 +57,7 @@ type (
 
 	// Livestream -.
 	Livestream interface {
+		LiveMaster(ctx context.Context, id string) (string, error)
 		GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)
 		ResetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)
 		AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error)

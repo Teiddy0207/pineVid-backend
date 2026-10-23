@@ -59,6 +59,9 @@ x-backend-app-environment: &x-backend-app-environment
   # SRS's own http_api (read-only stream list), polled for is_live
   # reconciliation — must be the in-cluster service name, not localhost.
   SRS_API_URL: "http://srs:1985"
+  SRS_HTTP_URL: "http://srs:8080"
+  LIVE_HLS_ENABLED: "${LIVE_HLS_ENABLED:-false}"
+  LIVE_HLS_PUBLIC_URL: "${LIVE_HLS_PUBLIC_URL:-http://localhost:8082}"
   MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:?set MINIO_ROOT_USER in backend/.env}"
   MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in backend/.env}"
   MINIO_USE_SSL: "false"
@@ -215,14 +218,14 @@ services:
 
   srs:
     container_name: srs
-    image: ossrs/srs:5
+    image: ${SRS_IMAGE:-ossrs/srs:5}
     # mkdir+chmod first: SRS (root) would otherwise create objs/dvr/live with
     # 755, which the backend process (running as an unprivileged host user)
     # can't delete recordings from after uploading them to S3.
     entrypoint: ["/bin/sh", "-c"]
     # The http_hooks URLs (incl. the internal webhook secret) are rendered
     # from srs/live.conf.tpl at startup, so the secret lives only in .env.
-    command: ["mkdir -p objs/dvr/live && chmod -R 777 objs/dvr && sed -e \"s|__SRS_HOOK_BASE_URL__|$$SRS_HOOK_BASE_URL|g\" -e \"s|__INTERNAL_WEBHOOK_SECRET__|$$INTERNAL_WEBHOOK_SECRET|g\" conf/live.conf.tpl > conf/live.conf && exec ./objs/srs -c conf/live.conf"]
+    command: ["mkdir -p objs/dvr/live && chmod -R 777 objs/dvr && sed -e \"s|__SRS_HOOK_BASE_URL__|$$SRS_HOOK_BASE_URL|g\" -e \"s|__INTERNAL_WEBHOOK_SECRET__|$$INTERNAL_WEBHOOK_SECRET|g\" -e \"s|__LIVE_TRANSCODE_ENABLED__|${LIVE_TRANSCODE_ENABLED:-off}|g\" -e \"s|__LIVE_720_ENABLED__|${LIVE_720_ENABLED:-on}|g\" -e \"s|__LIVE_480_ENABLED__|${LIVE_480_ENABLED:-on}|g\" conf/live.conf.tpl > conf/live.conf && exec ./objs/srs -c conf/live.conf"]
     environment:
       INTERNAL_WEBHOOK_SECRET: "${INTERNAL_WEBHOOK_SECRET}"
       # Where SRS reaches the backend: the host when the backend runs via

@@ -12,20 +12,20 @@ import (
 	"github.com/evrone/go-clean-template/config"
 	"github.com/evrone/go-clean-template/internal/controller/grpc"
 	grpcmw "github.com/evrone/go-clean-template/internal/controller/grpc/middleware"
-	"github.com/evrone/go-clean-template/internal/controller/natsjobs"
 	natsrpc "github.com/evrone/go-clean-template/internal/controller/nats_rpc"
+	"github.com/evrone/go-clean-template/internal/controller/natsjobs"
 	"github.com/evrone/go-clean-template/internal/controller/restapi"
 	"github.com/evrone/go-clean-template/internal/events"
 	persistAdminStatsRepo "github.com/evrone/go-clean-template/internal/repo/persistent/adminstats"
+	persistChatMsgRepo "github.com/evrone/go-clean-template/internal/repo/persistent/chatmessage"
 	persistCommentRepo "github.com/evrone/go-clean-template/internal/repo/persistent/comment"
 	persistCommentLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/commentlike"
 	persistFollowRepo "github.com/evrone/go-clean-template/internal/repo/persistent/follow"
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
 	persistLiveEventRepo "github.com/evrone/go-clean-template/internal/repo/persistent/liveevent"
-	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
-	persistChatMsgRepo   "github.com/evrone/go-clean-template/internal/repo/persistent/chatmessage"
 	persistLiveSessionRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livesession"
+	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
 	persistNotifRepo "github.com/evrone/go-clean-template/internal/repo/persistent/notification"
 	persistPostRepo "github.com/evrone/go-clean-template/internal/repo/persistent/post"
 	persistPostLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/postlike"
@@ -154,7 +154,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	if natsPub != nil {
 		jobPub = natsPub
 	}
-	
+
 	if cfg.TranscodeSync.Mode == "sync" {
 		syncRunner, err := transcodejob.NewSyncRunner(
 			videoRepo,
@@ -180,6 +180,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	}
 
 	srsClient := pkgsrs.New(cfg.SRS.APIURL)
+	srsClient.ConfigureHLS(cfg.SRS.HTTPURL, cfg.SRS.LiveHLSPublicURL)
 	if cfg.Minio.PresignUploads {
 		signer, err := pkgminio.NewSigner(cfg.Minio.PublicURL, cfg.Minio.AccessKey, cfg.Minio.SecretKey)
 		if err != nil {
@@ -189,6 +190,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		l.Info("MINIO_PRESIGN_UPLOADS: browser uploads use presigned PUT URLs")
 	}
 	livestreamUc := livestreamusecase.New(livestreamRepo, liveSessionRepo, chatMsgRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, jobs, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
+	livestreamUc.WithLiveHLS(cfg.SRS.LiveHLSEnabled)
 	if liveEventLog != nil {
 		livestreamUc.WithLiveEvents(liveEventLog)
 	}

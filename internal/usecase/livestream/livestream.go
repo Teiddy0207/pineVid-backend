@@ -52,6 +52,7 @@ type UseCase struct {
 	rawBucket     string
 	dvrLocalDir   string
 	graceDuration time.Duration
+	liveHLS       bool
 
 	mu      sync.Mutex
 	pending map[string]*pendingEnd
@@ -80,10 +81,12 @@ func (u *UseCase) WithLiveEvents(l repo.LiveEventLog) *UseCase {
 	return u
 }
 
-// withFollowersCount enriches an already-mapped LivestreamResponse with the
-// streamer's real follower count. Best-effort: a lookup failure just leaves
-// the count at its zero value rather than failing the whole response.
-func (u *UseCase) withFollowersCount(ctx context.Context, res response.LivestreamResponse) response.LivestreamResponse {
+// enrichResponse selects the live playback URL and adds the follower count.
+// Follower lookup is best-effort.
+func (u *UseCase) enrichResponse(ctx context.Context, res response.LivestreamResponse) response.LivestreamResponse {
+	if u.liveHLS && res.IsLive {
+		res.HLSUrl = "/v1/live/streams/" + res.ID + "/master.m3u8"
+	}
 	if u.followRepo == nil {
 		return res
 	}
@@ -152,6 +155,9 @@ func (u *UseCase) ResetStreamKey(ctx context.Context, userID string) (response.S
 }
 
 func (u *UseCase) AuthenticateStreamKey(ctx context.Context, req request.StreamKeyAuth) (bool, error) {
+	if req.App != "" && req.App != "live" {
+		return false, entity.ErrInvalidStreamKey
+	}
 	ls, err := u.repo.GetByStreamKey(ctx, req.StreamKey)
 	if err != nil {
 		return false, entity.ErrInvalidStreamKey
@@ -495,7 +501,7 @@ func (u *UseCase) GetStreamByID(ctx context.Context, id string) (response.Livest
 	if err != nil {
 		return response.LivestreamResponse{}, err
 	}
-	return u.withFollowersCount(ctx, mapper.ToLivestreamResponse(ls)), nil
+	return u.enrichResponse(ctx, mapper.ToLivestreamResponse(ls)), nil
 }
 
 func (u *UseCase) ListActiveStreams(ctx context.Context, category string, page, limit int) (response.PageResponse[response.LivestreamResponse], error) {
@@ -507,7 +513,7 @@ func (u *UseCase) ListActiveStreams(ctx context.Context, category string, page, 
 
 	pageResp := mapper.ToLivestreamPageResponse(streams, total, page, limit)
 	for i := range pageResp.Data {
-		pageResp.Data[i] = u.withFollowersCount(ctx, pageResp.Data[i])
+		pageResp.Data[i] = u.enrichResponse(ctx, pageResp.Data[i])
 	}
 	return pageResp, nil
 }
@@ -533,7 +539,7 @@ func (u *UseCase) UpdateStreamInfo(ctx context.Context, userID string, req reque
 		return response.LivestreamResponse{}, fmt.Errorf("LivestreamUseCase - UpdateStreamInfo - Update: %w", err)
 	}
 
-	return mapper.ToLivestreamResponse(ls), nil
+	return u.enrichResponse(ctx, mapper.ToLivestreamResponse(ls)), nil
 }
 
 // maxChatMessageRunes caps a single chat line (Twitch uses 500).
@@ -777,4 +783,3 @@ func (u *UseCase) GetSessionChatHistory(ctx context.Context, sessionID string, p
 		},
 	}, nil
 }
-

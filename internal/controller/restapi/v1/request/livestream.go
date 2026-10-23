@@ -1,6 +1,9 @@
 package request
 
 type StreamKeyAuth struct {
+	App   string `json:"app"`
+	IP    string `json:"ip"`
+	Vhost string `json:"vhost"`
 	// SRS's on_publish/on_unpublish HTTP callback POSTs a JSON body with the
 	// stream key under "stream" (e.g. {"action":"on_publish",...,"stream":"sk_live_..."}).
 	StreamKey string `json:"stream" form:"name" validate:"required"`

@@ -281,7 +281,7 @@ func (r *V1) unpublishRTMPStream(ctx *fiber.Ctx) error {
 		body.StreamKey = ctx.FormValue("name")
 	}
 
-	if body.StreamKey == "" {
+	if body.StreamKey == "" || (body.App != "" && body.App != "live") {
 		return ctx.Status(http.StatusOK).JSON(srsHookAccepted) // nothing to do, but still ack the callback
 	}
 
@@ -305,7 +305,7 @@ func (r *V1) handleDVRComplete(ctx *fiber.Ctx) error {
 		body.StreamKey = ctx.FormValue("name")
 	}
 
-	if body.StreamKey == "" {
+	if body.StreamKey == "" || (body.App != "" && body.App != "live") {
 		return ctx.Status(http.StatusOK).JSON(srsHookAccepted)
 	}
 
@@ -382,4 +382,3 @@ func (r *V1) getSessionChatHistory(ctx *fiber.Ctx) error {
 	}
 	return ctx.Status(http.StatusOK).JSON(pageDTO)
 }
-

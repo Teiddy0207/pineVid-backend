@@ -107,6 +107,7 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 	{
 		livePublicGroup.Get("/streams", r.listActiveStreams)
 		livePublicGroup.Get("/streams/:id", r.getStream)
+		livePublicGroup.Get("/streams/:id/master.m3u8", r.liveMaster)
 		livePublicGroup.Get("/streams/:id/sessions", r.listLiveSessions)
 		livePublicGroup.Get("/sessions/:sessionID/chat", r.getSessionChatHistory)
 		livePublicGroup.Post("/streams/:id/chat", auth, rl.Limit("chat", 20, 30*time.Second), r.sendChatMessage)

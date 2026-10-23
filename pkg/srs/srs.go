@@ -11,17 +11,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	hlsURL       string
+	publicHLSURL string
+	baseURL      string
+	httpClient   *http.Client
 }
 
 func New(baseURL string) *Client {
 	return &Client{
 		baseURL:    baseURL,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 
@@ -31,6 +34,11 @@ type streamsResponse struct {
 }
 
 type stream struct {
+	App   string `json:"app"`
+	Video *struct {
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	} `json:"video"`
 	Name    string  `json:"name"` // the stream key, e.g. "sk_live_..."
 	Publish publish `json:"publish"`
 }
@@ -60,10 +68,13 @@ func (c *Client) listStreams(ctx context.Context) ([]stream, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, fmt.Errorf("Decode: %w", err)
 	}
+	if body.Code != 0 {
+		return nil, fmt.Errorf("SRS API error: %d", body.Code)
+	}
 	return body.Streams, nil
 }
 
-// KickPublisher force-disconnects whoever is currently publishing streamKey
+// KickPublisher disconnects the source and any active ABR outputs of streamKey
 // (SRS DELETE /api/v1/clients/{cid}). Not publishing is not an error.
 func (c *Client) KickPublisher(ctx context.Context, streamKey string) error {
 	streams, err := c.listStreams(ctx)
@@ -72,7 +83,7 @@ func (c *Client) KickPublisher(ctx context.Context, streamKey string) error {
 	}
 
 	for _, s := range streams {
-		if s.Name != streamKey || !s.Publish.Active || s.Publish.CID == "" {
+		if (s.Name != streamKey && s.Name != streamKey+"_720" && s.Name != streamKey+"_480") || !s.Publish.Active || s.Publish.CID == "" {
 			continue
 		}
 
@@ -102,7 +113,7 @@ func (c *Client) ActiveStreamKeys(ctx context.Context) (map[string]bool, error) 
 
 	keys := make(map[string]bool, len(streams))
 	for _, s := range streams {
-		if s.Publish.Active {
+		if s.Publish.Active && (s.App == "live" || s.App == "") {
 			keys[s.Name] = true
 		}
 	}

@@ -11,22 +11,22 @@ import (
 type (
 	// Config -.
 	Config struct {
-		App       app
-		HTTP      http
-		Log       log
-		PG        pg
-		GRPC      grpc
-		RMQ       rmq
-		NATS      nats
-		JWT       jwt
-		Redis     redis
-		Metrics   metrics
-		Swagger   swagger
-		Tracing   tracing
-		Minio     minio
-		DVR       dvr
-		SRS       srs
-		Security  security
+		App           app
+		HTTP          http
+		Log           log
+		PG            pg
+		GRPC          grpc
+		RMQ           rmq
+		NATS          nats
+		JWT           jwt
+		Redis         redis
+		Metrics       metrics
+		Swagger       swagger
+		Tracing       tracing
+		Minio         minio
+		DVR           dvr
+		SRS           srs
+		Security      security
 		Transcode     transcode
 		Benchmark     benchmark
 		ViewCounter   viewCounter
@@ -143,6 +143,9 @@ type (
 	// which SRS calls into us on) — polled periodically to reconcile the
 	// `is_live` DB flag in case an on_unpublish webhook never arrives.
 	srs struct {
+		HTTPURL           string        `env:"SRS_HTTP_URL" envDefault:"http://localhost:8082"`
+		LiveHLSEnabled    bool          `env:"LIVE_HLS_ENABLED" envDefault:"false"`
+		LiveHLSPublicURL  string        `env:"LIVE_HLS_PUBLIC_URL" envDefault:"http://localhost:8082"`
 		APIURL            string        `env:"SRS_API_URL" envDefault:"http://localhost:1985"`
 		ReconcileInterval time.Duration `env:"SRS_RECONCILE_INTERVAL" envDefault:"15s"`
 	}

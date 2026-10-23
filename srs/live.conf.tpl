@@ -33,13 +33,69 @@ vhost __defaultVhost__ {
         on_unpublish    __SRS_HOOK_BASE_URL__/v1/live/unpublish?secret=__INTERNAL_WEBHOOK_SECRET__;
         on_dvr          __SRS_HOOK_BASE_URL__/v1/live/dvr?secret=__INTERNAL_WEBHOOK_SECRET__;
     }
+    transcode live {
+        enabled __LIVE_TRANSCODE_ENABLED__;
+        ffmpeg ./objs/ffmpeg/bin/ffmpeg;
+        engine p720 {
+            enabled __LIVE_720_ENABLED__;
+            vcodec libx264;
+            vbitrate 2400;
+            vfps 25;
+            vwidth 0;
+            vheight 0;
+            vthreads 1;
+            vprofile main;
+            vpreset veryfast;
+            vparams {
+                vf "scale=-2:trunc(min(ih\,720)/2)*2";
+                g 50;
+                keyint_min 50;
+                sc_threshold 0;
+                bf 0;
+            }
+            acodec aac;
+            abitrate 96;
+            asample_rate 48000;
+            achannels 2;
+            oformat flv;
+            output rtmp://127.0.0.1:[port]/abr/[stream]_720?vhost=pipevid-internal;
+        }
+        engine p480 {
+            enabled __LIVE_480_ENABLED__;
+            vcodec libx264;
+            vbitrate 1100;
+            vfps 25;
+            vwidth 0;
+            vheight 0;
+            vthreads 1;
+            vprofile main;
+            vpreset veryfast;
+            vparams {
+                vf "scale=-2:trunc(min(ih\,480)/2)*2";
+                g 50;
+                keyint_min 50;
+                sc_threshold 0;
+                bf 0;
+            }
+            acodec aac;
+            abitrate 96;
+            asample_rate 48000;
+            achannels 2;
+            oformat flv;
+            output rtmp://127.0.0.1:[port]/abr/[stream]_480?vhost=pipevid-internal;
+        }
+    }
     hls {
         enabled         on;
-        hls_fragment    10;
-        hls_window      60;
+        hls_fragment    2;
+        hls_window      12;
         hls_path        ./objs/nginx/html;
         hls_m3u8_file   [app]/[stream].m3u8;
-        hls_ts_file     [app]/[stream]-[seq].ts;
+        hls_ts_file     [app]/[stream]-[timestamp]-[seq].ts;
+        hls_cleanup on;
+        hls_ctx off;
+        hls_ts_ctx off;
+        hls_dispose 15;
     }
     # Records each publish session to a single flat .flv file so the backend's
     # on_dvr handler can pick it up (deterministic path: no [timestamp], the
@@ -49,5 +105,26 @@ vhost __defaultVhost__ {
         enabled         on;
         dvr_plan        session;
         dvr_path        ./objs/dvr/[app]/[stream].flv;
+    }
+}
+
+# Only SRS-managed FFmpeg may publish here. No DVR, hooks or transcode.
+vhost pipevid-internal {
+    security {
+        enabled on;
+        allow publish 127.0.0.1;
+        allow play 127.0.0.1;
+    }
+    hls {
+        enabled on;
+        hls_fragment 2;
+        hls_window 12;
+        hls_path ./objs/nginx/html;
+        hls_m3u8_file [app]/[stream].m3u8;
+        hls_ts_file [app]/[stream]-[timestamp]-[seq].ts;
+        hls_cleanup on;
+        hls_ctx off;
+        hls_ts_ctx off;
+        hls_dispose 15;
     }
 }
