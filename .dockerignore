@@ -17,3 +17,6 @@ LICENSE
 Makefile
 README*
 dvr-data
+
+# Build helpers do not affect the application image.
+build*.sh

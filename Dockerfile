@@ -1,29 +1,21 @@
-# Step 1: Modules caching
+# syntax=docker/dockerfile:1
+# Cache downloaded modules independently from application source.
 FROM golang:1.26-alpine3.23 AS modules
-
-COPY go.mod go.sum /modules/
-
-WORKDIR /modules
-
-RUN go mod download
-
-# Step 2: Builder
-FROM golang:1.26-alpine3.23 AS builder
-
-COPY --from=modules /go/pkg /go/pkg
-COPY . /app
-
 WORKDIR /app
+COPY go.mod go.sum ./
+RUN --mount=type=cache,id=pipevid-backend-modules,target=/go/pkg/mod \
+    go mod download
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+FROM modules AS builder
+COPY . .
+RUN --mount=type=cache,id=pipevid-backend-modules,target=/go/pkg/mod \
+    --mount=type=cache,id=pipevid-backend-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -tags migrate -o /bin/app ./cmd/app
 
-# Step 3: Final
 FROM scratch
-
 COPY --from=builder /app/config /config
 COPY --from=builder /app/migrations /migrations
 COPY --from=builder /bin/app /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
 CMD ["/app"]

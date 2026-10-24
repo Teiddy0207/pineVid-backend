@@ -1812,3 +1812,14 @@ func (mr *MockPostLikeRepoMockRecorder) ToggleLike(ctx, postID, userID any) *gom
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToggleLike", reflect.TypeOf((*MockPostLikeRepo)(nil).ToggleLike), ctx, postID, userID)
 }
+
+func (m *MockLiveSessionRepo) RecordViewer(ctx context.Context, sessionID, identity string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordViewer", ctx, sessionID, identity)
+	err, _ := ret[0].(error)
+	return err
+}
+func (mr *MockLiveSessionRepoMockRecorder) RecordViewer(ctx, sessionID, identity any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordViewer", reflect.TypeOf((*MockLiveSessionRepo)(nil).RecordViewer), ctx, sessionID, identity)
+}

@@ -158,18 +158,59 @@ func (r *Repo) EndSession(ctx context.Context, id string, endedAt time.Time) err
 	return nil
 }
 
+// SetReplayVideo transfers accumulated live views exactly once. Both this and
+// RecordViewer lock the session, so a concurrent final heartbeat is not lost.
 func (r *Repo) SetReplayVideo(ctx context.Context, id, videoID string) error {
-	sql, args, err := r.Builder.
-		Update("live_sessions").
-		Set("replay_video_id", videoID).
-		Where(sq.Eq{"id": id}).
-		ToSql()
+	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("LiveSessionRepo - SetReplayVideo - Builder: %w", err)
+		return err
 	}
+	defer tx.Rollback(ctx)
+	var previous string
+	if err := tx.QueryRow(ctx, "SELECT COALESCE(replay_video_id, '') FROM live_sessions WHERE id = $1 FOR UPDATE", id).Scan(&previous); err != nil {
+		return err
+	}
+	if previous == videoID {
+		return tx.Commit(ctx)
+	}
+	if previous != "" {
+		return fmt.Errorf("session already linked to replay %s", previous)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE videos SET views = views +
+  (SELECT COUNT(*) FROM live_session_viewers WHERE session_id = $1)
+  WHERE id = $2`, id, videoID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "UPDATE live_sessions SET replay_video_id = $2 WHERE id = $1", id, videoID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
 
-	if _, err := r.Pool.Exec(ctx, sql, args...); err != nil {
-		return fmt.Errorf("LiveSessionRepo - SetReplayVideo - Exec: %w", err)
+// RecordViewer counts one identity per broadcast, including after the replay
+// link is published if a heartbeat was already in flight when the live ended.
+func (r *Repo) RecordViewer(ctx context.Context, sessionID, identity string) error {
+	if identity == "" {
+		return nil
 	}
-	return nil
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var replay string
+	if err := tx.QueryRow(ctx, "SELECT COALESCE(replay_video_id, '') FROM live_sessions WHERE id = $1 FOR UPDATE", sessionID).Scan(&replay); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `INSERT INTO live_session_viewers (session_id, identity)
+  VALUES ($1, $2) ON CONFLICT DO NOTHING`, sessionID, identity)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() > 0 && replay != "" {
+		if _, err := tx.Exec(ctx, "UPDATE videos SET views = views + 1 WHERE id = $1", replay); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

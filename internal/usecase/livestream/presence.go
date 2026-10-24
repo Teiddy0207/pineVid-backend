@@ -3,6 +3,7 @@ package livestream
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
@@ -40,6 +41,16 @@ func (u *UseCase) ViewerPresence(ctx context.Context, id, action, tab, identity,
 	count, err := u.presence.Apply(ctx, key, action, tab, identity)
 	if err != nil {
 		return response.LiveViewersResponse{}, ErrPresenceUnavailable
+	}
+	if action == "heartbeat" && identity != "" && u.sessionRepo != nil {
+		session, sessionErr := u.sessionRepo.GetCurrentByLivestreamID(ctx, id)
+		if sessionErr == nil {
+			if err := u.sessionRepo.RecordViewer(ctx, session.ID, identity); err != nil {
+				return response.LiveViewersResponse{}, fmt.Errorf("record live viewer: %w", err)
+			}
+		} else if !errors.Is(sessionErr, entity.ErrLiveSessionNotFound) {
+			return response.LiveViewersResponse{}, sessionErr
+		}
 	}
 	return response.LiveViewersResponse{StreamID: id, Broadcast: key, ViewersCount: count}, nil
 }

@@ -98,6 +98,7 @@ type (
 		EndSession(ctx context.Context, id string, endedAt time.Time) error
 		// SetReplayVideo links a replay VOD to the session after DVR processing.
 		SetReplayVideo(ctx context.Context, id, videoID string) error
+		RecordViewer(ctx context.Context, sessionID, identity string) error
 	}
 
 	// ChatMessageRepo persists chat lines for replay. Real-time delivery is
