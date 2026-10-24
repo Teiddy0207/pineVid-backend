@@ -53,6 +53,7 @@ type UseCase struct {
 	dvrLocalDir   string
 	graceDuration time.Duration
 	liveHLS       bool
+	presence      repo.LivePresence
 
 	mu      sync.Mutex
 	pending map[string]*pendingEnd
@@ -84,6 +85,7 @@ func (u *UseCase) WithLiveEvents(l repo.LiveEventLog) *UseCase {
 // enrichResponse selects the live playback URL and adds the follower count.
 // Follower lookup is best-effort.
 func (u *UseCase) enrichResponse(ctx context.Context, res response.LivestreamResponse) response.LivestreamResponse {
+	res.ViewersCount = u.presenceCount(ctx, res.ID, res.StartedAt, res.IsLive, res.ViewersCount)
 	if u.liveHLS && res.IsLive {
 		res.HLSUrl = "/v1/live/streams/" + res.ID + "/master.m3u8"
 	}
@@ -127,7 +129,7 @@ func (u *UseCase) GetStreamKey(ctx context.Context, userID string) (response.Str
 		StreamKey:    ls.StreamKey,
 		IsLive:       ls.IsLive,
 		StartedAt:    ls.StartedAt,
-		ViewersCount: ls.ViewersCount,
+		ViewersCount: u.presenceCount(ctx, ls.ID, ls.StartedAt, ls.IsLive, ls.ViewersCount),
 	}, nil
 }
 
@@ -150,7 +152,7 @@ func (u *UseCase) ResetStreamKey(ctx context.Context, userID string) (response.S
 		StreamKey:    ls.StreamKey,
 		IsLive:       ls.IsLive,
 		StartedAt:    ls.StartedAt,
-		ViewersCount: ls.ViewersCount,
+		ViewersCount: u.presenceCount(ctx, ls.ID, ls.StartedAt, ls.IsLive, ls.ViewersCount),
 	}, nil
 }
 

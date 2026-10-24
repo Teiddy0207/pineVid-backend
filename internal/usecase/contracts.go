@@ -57,6 +57,7 @@ type (
 
 	// Livestream -.
 	Livestream interface {
+		ViewerPresence(ctx context.Context, id, action, tab, identity, broadcast string) (response.LiveViewersResponse, error)
 		LiveMaster(ctx context.Context, id string) (string, error)
 		GetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)
 		ResetStreamKey(ctx context.Context, userID string) (response.StreamKeyResponse, error)

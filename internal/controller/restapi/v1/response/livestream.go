@@ -32,16 +32,16 @@ type LivestreamStreamer struct {
 }
 
 type LivestreamResponse struct {
-	ID           string              `json:"id" example:"ls_550e8400"`
-	Streamer     LivestreamStreamer  `json:"streamer"`
-	Title        string              `json:"title" example:"Exploring the edge of the universe"`
-	Category     string              `json:"category" example:"Science"`
-	ThumbnailURL string              `json:"thumbnail_url" example:"https://media.pipevid.com/public-assets/images/cover.jpg"`
-	IsLive      bool                `json:"is_live" example:"true"`
-	HLSUrl       string              `json:"hls_url" example:"https://s3.pipevid.com/live/streamkey/index.m3u8"`
-	ViewersCount int64               `json:"viewers_count" example:"24812"`
-	StartedAt    *time.Time          `json:"started_at,omitempty"`
-	EndedAt      *time.Time          `json:"ended_at,omitempty"`
+	ID           string             `json:"id" example:"ls_550e8400"`
+	Streamer     LivestreamStreamer `json:"streamer"`
+	Title        string             `json:"title" example:"Exploring the edge of the universe"`
+	Category     string             `json:"category" example:"Science"`
+	ThumbnailURL string             `json:"thumbnail_url" example:"https://media.pipevid.com/public-assets/images/cover.jpg"`
+	IsLive       bool               `json:"is_live" example:"true"`
+	HLSUrl       string             `json:"hls_url" example:"https://s3.pipevid.com/live/streamkey/index.m3u8"`
+	ViewersCount int64              `json:"viewers_count" example:"24812"`
+	StartedAt    *time.Time         `json:"started_at,omitempty"`
+	EndedAt      *time.Time         `json:"ended_at,omitempty"`
 }
 
 type StreamKeyResponse struct {
@@ -65,10 +65,16 @@ type ChatMessageResponse struct {
 	StreamID string `json:"stream_id" example:"ls_550e8400"`
 	// Type discriminates the SSE event: "chat" (default) or "heart". Frontend
 	// listeners should branch on this instead of guessing from Text content.
-	Type      string   `json:"type,omitempty" example:"chat"`
-	User      ChatUser `json:"user"`
-	Text      string   `json:"text" example:"This stream is amazing!"`
+	Type string   `json:"type,omitempty" example:"chat"`
+	User ChatUser `json:"user"`
+	Text string   `json:"text" example:"This stream is amazing!"`
 	// Value carries the room's new running heart total when Type=="heart".
 	Value     int64  `json:"value,omitempty" example:"128"`
 	CreatedAt string `json:"created_at" example:"14:32:05"`
+}
+
+type LiveViewersResponse struct {
+	StreamID     string `json:"stream_id"`
+	Broadcast    string `json:"broadcast"`
+	ViewersCount int64  `json:"viewers_count"`
 }

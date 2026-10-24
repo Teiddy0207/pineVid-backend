@@ -206,3 +206,8 @@ type (
 		IsLikedByUser(ctx context.Context, postID, userID string) (bool, error)
 	}
 )
+
+// LivePresence tracks expiring tabs and deduplicates their viewer identities.
+type LivePresence interface {
+	Apply(ctx context.Context, broadcast, action, tab, identity string) (int64, error)
+}

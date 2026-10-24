@@ -46,7 +46,13 @@ func buildRequestMessage(ctx *fiber.Ctx) string {
 	result.WriteString(" - ")
 	result.WriteString(strconv.Itoa(ctx.Response().StatusCode()))
 	result.WriteString(" ")
-	result.WriteString(strconv.Itoa(len(ctx.Response().Body())))
+	// Reading Body drains a streaming response and prevents SSE from reaching
+	// the browser until the stream closes. Log an unknown size instead.
+	if ctx.Response().IsBodyStream() {
+		result.WriteString("-")
+	} else {
+		result.WriteString(strconv.Itoa(len(ctx.Response().Body())))
+	}
 
 	return result.String()
 }

@@ -24,6 +24,7 @@ import (
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
 	persistLiveEventRepo "github.com/evrone/go-clean-template/internal/repo/persistent/liveevent"
+	persistLivePresenceRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livepresence"
 	persistLiveSessionRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livesession"
 	persistLivestreamRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livestream"
 	persistNotifRepo "github.com/evrone/go-clean-template/internal/repo/persistent/notification"
@@ -191,6 +192,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	}
 	livestreamUc := livestreamusecase.New(livestreamRepo, liveSessionRepo, chatMsgRepo, videoRepo, followRepo, chatHub, notifUc, minioClient, jobs, srsClient, cfg.Minio.RawBucket, cfg.DVR.LocalDir, 30*time.Second)
 	livestreamUc.WithLiveHLS(cfg.SRS.LiveHLSEnabled)
+	livestreamUc.WithPresence(persistLivePresenceRepo.New(redisClient))
 	if liveEventLog != nil {
 		livestreamUc.WithLiveEvents(liveEventLog)
 	}
