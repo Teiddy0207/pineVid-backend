@@ -17,7 +17,7 @@ func ToLivestreamResponse(ls entity.Livestream) response.LivestreamResponse {
 		Title:        ls.Title,
 		Category:     ls.Category,
 		ThumbnailURL: ls.ThumbnailURL,
-		IsLive:      ls.IsLive,
+		IsLive:       ls.IsLive,
 		HLSUrl:       ls.HLSUrl,
 		ViewersCount: ls.ViewersCount,
 		StartedAt:    ls.StartedAt,
@@ -110,6 +110,8 @@ func ToLiveSessionPageResponse(sessions []entity.LiveSession, totalItems, page, 
 
 func ToStoredChatMessageResponse(msg entity.LiveChatMessage) response.ChatMessageResponse {
 	return response.ChatMessageResponse{
+		ID:       msg.ID,
+		SentAt:   &msg.CreatedAt,
 		StreamID: msg.SessionID,
 		Type:     "chat",
 		User: response.ChatUser{
@@ -120,4 +122,3 @@ func ToStoredChatMessageResponse(msg entity.LiveChatMessage) response.ChatMessag
 		CreatedAt: msg.CreatedAt.Format("15:04:05"),
 	}
 }
-

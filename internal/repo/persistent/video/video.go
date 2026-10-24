@@ -79,6 +79,13 @@ func (r *Repo) GetByID(ctx context.Context, id string) (entity.Video, error) {
 		return entity.Video{}, fmt.Errorf("VideoRepo - GetByID - QueryRow: %w", err)
 	}
 
+	// Replay metadata is only needed on the watch page, not in video listings.
+	err = r.Pool.QueryRow(ctx, `SELECT id, started_at FROM live_sessions
+		WHERE replay_video_id = $1 ORDER BY started_at DESC LIMIT 1`, id).
+		Scan(&v.ReplaySessionID, &v.ReplayStartedAt)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return entity.Video{}, fmt.Errorf("VideoRepo - GetByID - replay: %w", err)
+	}
 	return v, nil
 }
 

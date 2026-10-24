@@ -51,6 +51,7 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		videosPublicGroup.Post("/:id/view-session", rl.Limit("view-session", 60, time.Minute), r.startViewSession)
 		videosPublicGroup.Post("/:id/views", rl.Limit("views", 60, time.Minute), r.recordVideoView)
 		videosPublicGroup.Get("/:id/comments", r.listVideoComments)
+		videosPublicGroup.Get("/:id/replay-chat", r.getVideoReplayChat)
 	}
 
 	commentsPublicGroup := apiV1Group.Group("/comments", optionalAuth)

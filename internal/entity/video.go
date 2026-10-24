@@ -59,23 +59,25 @@ const (
 )
 
 type Video struct {
-	ID           string          `json:"id"`
-	UserID       string          `json:"user_id"`
-	UserName     string          `json:"user_name"`
-	UserAvatar   string          `json:"user_avatar"`
-	Title        string          `json:"title"`
-	Description  string          `json:"description"`
-	Category     string          `json:"category"`
-	Status       VideoStatus     `json:"status"`
-	Visibility   VideoVisibility `json:"visibility"`
-	RawS3Key     string          `json:"raw_s3_key"`
-	HLSUrl       string          `json:"hls_url"`
-	ThumbnailUrl string          `json:"thumbnail_url"`
-	Duration     string          `json:"duration"`
-	IsReel       bool            `json:"is_reel"`
-	Views        int64           `json:"views"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ReplaySessionID string          `json:"replay_session_id,omitempty"`
+	ReplayStartedAt *time.Time      `json:"replay_started_at,omitempty"`
+	ID              string          `json:"id"`
+	UserID          string          `json:"user_id"`
+	UserName        string          `json:"user_name"`
+	UserAvatar      string          `json:"user_avatar"`
+	Title           string          `json:"title"`
+	Description     string          `json:"description"`
+	Category        string          `json:"category"`
+	Status          VideoStatus     `json:"status"`
+	Visibility      VideoVisibility `json:"visibility"`
+	RawS3Key        string          `json:"raw_s3_key"`
+	HLSUrl          string          `json:"hls_url"`
+	ThumbnailUrl    string          `json:"thumbnail_url"`
+	Duration        string          `json:"duration"`
+	IsReel          bool            `json:"is_reel"`
+	Views           int64           `json:"views"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 
 	// Transcode job tracking (docs/message-contract.md §4.3). QueuedAt →
 	// TranscodeCompletedAt is the upload-to-playable latency (criterion T2).

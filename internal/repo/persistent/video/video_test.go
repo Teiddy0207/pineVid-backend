@@ -273,3 +273,25 @@ func TestUpdate_DoesNotOverwriteStatus(t *testing.T) {
 	assert.Equal(t, entity.VideoStatusComplete, v.Status)
 	assert.Equal(t, hlsURL, v.HLSUrl)
 }
+
+func TestGetByIDIncludesReplaySession(t *testing.T) {
+	r, pg := newRepo(t)
+	ctx := context.Background()
+	videoID := storeQueued(t, r, "replay-metadata-job")
+	before, err := r.GetByID(ctx, videoID)
+	require.NoError(t, err)
+	require.Empty(t, before.ReplaySessionID)
+	require.Nil(t, before.ReplayStartedAt)
+
+	streamID, sessionID := uuid.NewString(), uuid.NewString()
+	started := time.Date(2026, 10, 24, 16, 59, 58, 0, time.UTC)
+	_, err = pg.Pool.Exec(ctx, `INSERT INTO livestreams (id, user_id, stream_key) VALUES ($1, $2, $3)`, streamID, before.UserID, uuid.NewString())
+	require.NoError(t, err)
+	_, err = pg.Pool.Exec(ctx, `INSERT INTO live_sessions (id, livestream_id, started_at, replay_video_id) VALUES ($1, $2, $3, $4)`, sessionID, streamID, started, videoID)
+	require.NoError(t, err)
+	after, err := r.GetByID(ctx, videoID)
+	require.NoError(t, err)
+	require.Equal(t, sessionID, after.ReplaySessionID)
+	require.NotNil(t, after.ReplayStartedAt)
+	require.True(t, started.Equal(*after.ReplayStartedAt))
+}

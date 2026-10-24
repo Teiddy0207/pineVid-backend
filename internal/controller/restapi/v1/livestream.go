@@ -382,3 +382,29 @@ func (r *V1) getSessionChatHistory(ctx *fiber.Ctx) error {
 	}
 	return ctx.Status(http.StatusOK).JSON(pageDTO)
 }
+
+// getVideoReplayChat applies the same visibility checks as watching the VOD.
+func (r *V1) getVideoReplayChat(ctx *fiber.Ctx) error {
+	video, err := r.vd.GetByID(ctx.UserContext(), ctx.Params("id"), getUserID(ctx))
+	if err != nil {
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "video not found")
+		}
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to load video")
+	}
+	if video.ReplaySessionID == "" {
+		return errorResponse(ctx, http.StatusNotFound, "video has no livestream replay")
+	}
+	page, limit := ctx.QueryInt("page", 1), ctx.QueryInt("limit", 100)
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	chat, err := r.ls.GetSessionChatHistory(ctx.UserContext(), video.ReplaySessionID, page, limit)
+	if err != nil {
+		return errorResponse(ctx, http.StatusInternalServerError, "failed to load replay chat")
+	}
+	return ctx.JSON(chat)
+}

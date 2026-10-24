@@ -52,7 +52,7 @@ func (r *Repo) ListBySessionID(ctx context.Context, sessionID string, limit, off
 		Select("id", "session_id", "username", "avatar", "text", "created_at").
 		From("live_chat_messages").
 		Where("session_id = ?", sessionID).
-		OrderBy("created_at ASC").
+		OrderBy("created_at ASC", "id ASC").
 		Limit(uint64(limit)).
 		Offset(uint64(offset)).
 		ToSql()
@@ -73,6 +73,9 @@ func (r *Repo) ListBySessionID(ctx context.Context, sessionID string, limit, off
 			return nil, 0, fmt.Errorf("ChatMessageRepo - ListBySessionID - Scan: %w", err)
 		}
 		messages = append(messages, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("ChatMessageRepo - ListBySessionID - rows: %w", err)
 	}
 	return messages, total, nil
 }

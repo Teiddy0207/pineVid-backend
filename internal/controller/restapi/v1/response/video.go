@@ -11,23 +11,25 @@ type VideoCreator struct {
 
 // VideoResponse is the DTO returned to clients for all video-related endpoints.
 type VideoResponse struct {
-	ID           string       `json:"id"            example:"550e8400-e29b-41d4-a716-446655440000"`
-	Creator      VideoCreator `json:"creator"`
-	Title        string       `json:"title"         example:"Exploring the edge of the universe"`
-	Description  string       `json:"description"   example:"Join Luna Chen as she explores space."`
-	Category     string       `json:"category"      example:"Science"`
-	Status       string       `json:"status"        example:"complete"`
-	Visibility   string       `json:"visibility"    example:"public"`
-	HLSUrl       string       `json:"hls_url"       example:"https://s3.pipevid.com/hls/space/master.m3u8"`
-	ThumbnailUrl string       `json:"thumbnail_url" example:"https://s3.pipevid.com/thumbnails/space.jpg"`
-	Duration     string       `json:"duration"      example:"18:42"`
-	IsReel       bool         `json:"is_reel"`
-	Views        int64        `json:"views"         example:"24812"`
-	LikesCount   int64        `json:"likes_count"   example:"312"`
-	IsLiked      bool         `json:"is_liked"`
-	IsSaved      bool         `json:"is_saved"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	ReplaySessionID string       `json:"replay_session_id,omitempty"`
+	ReplayStartedAt *time.Time   `json:"replay_started_at,omitempty"`
+	ID              string       `json:"id"            example:"550e8400-e29b-41d4-a716-446655440000"`
+	Creator         VideoCreator `json:"creator"`
+	Title           string       `json:"title"         example:"Exploring the edge of the universe"`
+	Description     string       `json:"description"   example:"Join Luna Chen as she explores space."`
+	Category        string       `json:"category"      example:"Science"`
+	Status          string       `json:"status"        example:"complete"`
+	Visibility      string       `json:"visibility"    example:"public"`
+	HLSUrl          string       `json:"hls_url"       example:"https://s3.pipevid.com/hls/space/master.m3u8"`
+	ThumbnailUrl    string       `json:"thumbnail_url" example:"https://s3.pipevid.com/thumbnails/space.jpg"`
+	Duration        string       `json:"duration"      example:"18:42"`
+	IsReel          bool         `json:"is_reel"`
+	Views           int64        `json:"views"         example:"24812"`
+	LikesCount      int64        `json:"likes_count"   example:"312"`
+	IsLiked         bool         `json:"is_liked"`
+	IsSaved         bool         `json:"is_saved"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
 } // @name response.VideoResponse
 
 type UploadUrlResponse struct {
@@ -72,4 +74,3 @@ type VideoSubtitlesResponse struct {
 	VideoID string                `json:"video_id"`
 	Cues    []SubtitleCueResponse `json:"cues"`
 }
-

@@ -62,7 +62,9 @@ type ChatUser struct {
 }
 
 type ChatMessageResponse struct {
-	StreamID string `json:"stream_id" example:"ls_550e8400"`
+	ID       int64      `json:"id,omitempty"`
+	SentAt   *time.Time `json:"sent_at,omitempty"`
+	StreamID string     `json:"stream_id" example:"ls_550e8400"`
 	// Type discriminates the SSE event: "chat" (default) or "heart". Frontend
 	// listeners should branch on this instead of guessing from Text content.
 	Type string   `json:"type,omitempty" example:"chat"`

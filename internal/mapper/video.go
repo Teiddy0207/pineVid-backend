@@ -54,11 +54,12 @@ func ApplyThumbnailUpdate(v *entity.Video, req request.UpdateThumbnail) {
 	}
 }
 
-
 // ToVideoResponse converts Video Entity to VideoResponse DTO
 func ToVideoResponse(v entity.Video) response.VideoResponse {
 	return response.VideoResponse{
-		ID: v.ID,
+		ReplaySessionID: v.ReplaySessionID,
+		ReplayStartedAt: v.ReplayStartedAt,
+		ID:              v.ID,
 		Creator: response.VideoCreator{
 			ID:     v.UserID,
 			Name:   v.UserName,
@@ -78,7 +79,6 @@ func ToVideoResponse(v entity.Video) response.VideoResponse {
 		UpdatedAt:    v.UpdatedAt,
 	}
 }
-
 
 // ToVideoResponses converts Video Entity slice to VideoResponse DTO slice
 func ToVideoResponses(videos []entity.Video) []response.VideoResponse {
