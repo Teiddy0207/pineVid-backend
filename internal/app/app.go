@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/evrone/go-clean-template/internal/usecase/watchprogress"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,6 +23,7 @@ import (
 	persistCommentLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/commentlike"
 	persistFollowRepo "github.com/evrone/go-clean-template/internal/repo/persistent/follow"
 	persistHistoryRepo "github.com/evrone/go-clean-template/internal/repo/persistent/history"
+	persistHistoryEventRepo "github.com/evrone/go-clean-template/internal/repo/persistent/historyevent"
 	persistLikeRepo "github.com/evrone/go-clean-template/internal/repo/persistent/like"
 	persistLiveEventRepo "github.com/evrone/go-clean-template/internal/repo/persistent/liveevent"
 	persistLivePresenceRepo "github.com/evrone/go-clean-template/internal/repo/persistent/livepresence"
@@ -82,6 +84,7 @@ type useCases struct {
 	post           usecase.Post
 	recommendation usecase.Recommendation
 	history        usecase.History
+	progress       *watchprogress.Service
 	follow         usecase.Follow
 	notification   usecase.Notification
 	vocabulary     usecase.Vocabulary
@@ -209,7 +212,9 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	postUc := postusecase.New(postRepo, postLikeRepo, notifUc)
 	recUc := recusecase.New(recRepo, videoRepo, userPrefRepo)
 	recUc.StartBackgroundTraining(context.Background(), 5*time.Minute)
-	historyUc := historyusecase.New(historyRepo)
+	historyUc := historyusecase.New(historyRepo).WithPublisher(persistHistoryEventRepo.New(redisClient))
+	progress := watchprogress.New(redisClient.Client, pg)
+	historyUc.Progress = progress
 	followUc := followusecase.New(followRepo)
 	vocabUc := vocabusecase.New(vocabRepo)
 	subtitleUc := subtitleusecase.New(subtitleRepo, videoRepo)
@@ -226,6 +231,7 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		post:           postUc,
 		recommendation: recUc,
 		history:        historyUc,
+		progress:       progress,
 		follow:         followUc,
 		notification:   notifUc,
 		vocabulary:     vocabUc,
@@ -376,6 +382,13 @@ func Run(cfg *config.Config) {
 	chatHub := events.NewChatHub()
 	notifHub := events.NewNotificationHub()
 	uc := initUseCases(cfg, pg, jwtManager, chatHub, notifHub, l)
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		uc.progress.Run(workerCtx, func(err error) { l.Error(err, "watch-progress worker") })
+	}()
+	defer func() { stopWorker(); <-workerDone }()
 	s := initServers(cfg, uc, chatHub, jwtManager, l)
 	s.startServers()
 	s.waitForShutdown(l)

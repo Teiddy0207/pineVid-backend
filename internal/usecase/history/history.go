@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/evrone/go-clean-template/internal/usecase/watchprogress"
 
 	"github.com/evrone/go-clean-template/internal/controller/restapi/v1/response"
 	"github.com/evrone/go-clean-template/internal/mapper"
@@ -10,12 +11,20 @@ import (
 )
 
 type UseCase struct {
-	repo repo.WatchHistoryRepo
+	repo      repo.WatchHistoryRepo
+	publisher WatchPublisher
+	Progress  *watchprogress.Service
 }
 
 func New(r repo.WatchHistoryRepo) *UseCase {
 	return &UseCase{repo: r}
 }
+
+type WatchPublisher interface {
+	RecordWatch(context.Context, string, string, int) error
+}
+
+func (u *UseCase) WithPublisher(p WatchPublisher) *UseCase { u.publisher = p; return u }
 
 // RecordWatch upserts the user's watch progress for a video. Best-effort from
 // the caller's perspective: a failure here should never fail the surrounding
@@ -24,8 +33,11 @@ func (u *UseCase) RecordWatch(ctx context.Context, userID, videoID string, watch
 	if userID == "" || videoID == "" {
 		return nil
 	}
-	if err := u.repo.Upsert(ctx, userID, videoID, watchSeconds); err != nil {
-		return fmt.Errorf("HistoryUseCase - RecordWatch - Upsert: %w", err)
+	if u.publisher == nil {
+		return fmt.Errorf("watch history publisher unavailable")
+	}
+	if err := u.publisher.RecordWatch(ctx, userID, videoID, watchSeconds); err != nil {
+		return fmt.Errorf("HistoryUseCase - RecordWatch - Publish: %w", err)
 	}
 	return nil
 }
@@ -37,4 +49,11 @@ func (u *UseCase) ListHistory(ctx context.Context, userID string, page, limit in
 		return response.PageResponse[response.VideoResponse]{}, fmt.Errorf("HistoryUseCase - ListHistory: %w", err)
 	}
 	return mapper.ToVideoPageResponse(videos, total, page, limit), nil
+}
+
+func (u *UseCase) LoadProgress(ctx context.Context, user, video string) (watchprogress.Progress, error) {
+	return u.Progress.Load(ctx, user, video)
+}
+func (u *UseCase) SaveProgress(ctx context.Context, user, video string, p watchprogress.Progress) error {
+	return u.Progress.Save(ctx, user, video, p)
 }

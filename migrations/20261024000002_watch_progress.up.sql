@@ -1,0 +1,1 @@
+ALTER TABLE watch_history ADD COLUMN position_seconds DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (position_seconds >= 0), ADD COLUMN completed BOOLEAN NOT NULL DEFAULT FALSE, ADD COLUMN progress_version TEXT NOT NULL DEFAULT '0-0';

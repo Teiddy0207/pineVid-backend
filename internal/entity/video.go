@@ -59,6 +59,9 @@ const (
 )
 
 type Video struct {
+	DurationSeconds float64         `json:"duration_seconds,omitempty"`
+	PositionSeconds float64         `json:"position_seconds,omitempty"`
+	Completed       bool            `json:"completed,omitempty"`
 	ReplaySessionID string          `json:"replay_session_id,omitempty"`
 	ReplayStartedAt *time.Time      `json:"replay_started_at,omitempty"`
 	ID              string          `json:"id"`

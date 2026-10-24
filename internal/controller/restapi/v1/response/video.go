@@ -11,6 +11,9 @@ type VideoCreator struct {
 
 // VideoResponse is the DTO returned to clients for all video-related endpoints.
 type VideoResponse struct {
+	DurationSeconds float64      `json:"duration_seconds,omitempty"`
+	PositionSeconds float64      `json:"position_seconds,omitempty"`
+	Completed       bool         `json:"completed,omitempty"`
 	ReplaySessionID string       `json:"replay_session_id,omitempty"`
 	ReplayStartedAt *time.Time   `json:"replay_started_at,omitempty"`
 	ID              string       `json:"id"            example:"550e8400-e29b-41d4-a716-446655440000"`

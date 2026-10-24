@@ -79,7 +79,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql
     ports:
-      - "5435:5432"
+      - "${POSTGRES_PORT_EXTERNAL:-5435}:5432"
     networks:
       app_network:
         aliases:
@@ -123,6 +123,7 @@ services:
   redis:
     container_name: redis
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
       - "6380:6379"
     volumes:

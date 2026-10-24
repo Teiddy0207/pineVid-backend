@@ -58,7 +58,7 @@ func (r *Repo) ListByUser(ctx context.Context, userID string, limit, offset int)
 	}
 
 	dataSQL, dataArgs, err := r.Builder.
-		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.views", "v.created_at", "v.updated_at").
+		Select("v.id", "v.user_id", "COALESCE(u.username, u.email, 'Creator')", "COALESCE(u.avatar_url, '')", "v.title", "v.description", "v.category", "v.status", "v.visibility", "v.raw_s3_key", "v.hls_url", "v.thumbnail_url", "v.duration", "v.views", "v.created_at", "v.updated_at", "wh.position_seconds", "wh.completed", "wh.playback_duration_seconds").
 		From("watch_history wh").
 		Join("videos v ON wh.video_id = v.id").
 		LeftJoin("users u ON v.user_id::text = u.id::text").
@@ -81,7 +81,7 @@ func (r *Repo) ListByUser(ctx context.Context, userID string, limit, offset int)
 	videos := make([]entity.Video, 0, limit)
 	for rows.Next() {
 		var v entity.Video
-		if err := rows.Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.Views, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.UserID, &v.UserName, &v.UserAvatar, &v.Title, &v.Description, &v.Category, &v.Status, &v.Visibility, &v.RawS3Key, &v.HLSUrl, &v.ThumbnailUrl, &v.Duration, &v.Views, &v.CreatedAt, &v.UpdatedAt, &v.PositionSeconds, &v.Completed, &v.DurationSeconds); err != nil {
 			return nil, 0, fmt.Errorf("WatchHistoryRepo - ListByUser - rows.Scan: %w", err)
 		}
 		videos = append(videos, v)

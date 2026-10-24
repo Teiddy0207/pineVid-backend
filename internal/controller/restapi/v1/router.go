@@ -65,6 +65,8 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 	// state (see BUSINESS_REQUIREMENTS.md).
 	videosProtectedGroup := apiV1Group.Group("/videos", auth)
 	{
+		videosProtectedGroup.Get("/:id/progress", r.watchProgress)
+		videosProtectedGroup.Put("/:id/progress", rl.Limit("watch-progress", 60, time.Minute), r.watchProgress)
 		videosProtectedGroup.Post("/:id/like", rl.Limit("like", 60, time.Minute), r.toggleLikeVideo)
 		videosProtectedGroup.Post("/:id/comments", rl.Limit("comment", 10, time.Minute), r.createComment)
 		videosProtectedGroup.Post("/:id/save", rl.Limit("save", 60, time.Minute), r.toggleSaveVideo)
