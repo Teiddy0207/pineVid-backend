@@ -495,6 +495,14 @@ func (r *V1) recordVideoView(ctx *fiber.Ctx) error {
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to record video view")
 	}
 
+	// A validated view ticket also records history, even when view dedup
+	// prevents another increment of the public counter.
+	if userID := getUserID(ctx); userID != "" && r.hs != nil {
+		if err := r.hs.RecordWatch(ctx.UserContext(), userID, videoID, int(entity.MinWatchForView.Seconds())); err != nil {
+			r.l.Error(err, "restapi - v1 - recordVideoView - history")
+		}
+	}
+
 	return ctx.Status(http.StatusOK).JSON(response.RecordViewResponse{
 		VideoID:    videoID,
 		Recorded:   recorded,

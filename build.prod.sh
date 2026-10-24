@@ -4,7 +4,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 export DOCKER_BUILDKIT=1
 
-VERSION=0.0.10
+VERSION=0.0.11
 IMAGE=ghcr.io/teiddy0207/pipevid-backend:$VERSION
 
 docker build -f Dockerfile -t $IMAGE . --progress=plain
