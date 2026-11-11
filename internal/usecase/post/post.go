@@ -31,19 +31,22 @@ func New(r repo.PostRepo, likeRepo repo.PostLikeRepo, notifUc usecase.Notificati
 // withLikeInfo populates LikeCount/IsLiked on each post in place — a
 // post-mapping pass, same as CommentUseCase.withLikeInfo, since the mapper
 // package has no DB access of its own.
-func (u *UseCase) withLikeInfo(ctx context.Context, posts []response.PostResponse, viewerID string) []response.PostResponse {
+func (u *UseCase) withLikeInfo(ctx context.Context, posts []response.PostResponse, viewerID string) ([]response.PostResponse, error) {
 	if u.likeRepo == nil {
-		return posts
+		return posts, nil
 	}
 	for i := range posts {
-		if count, err := u.likeRepo.GetLikeCount(ctx, posts[i].ID); err == nil {
-			posts[i].LikeCount = count
+		count, err := u.likeRepo.GetLikeCount(ctx, posts[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("PostUseCase - GetLikeCount: %w", err)
 		}
-		if liked, err := u.likeRepo.IsLikedByUser(ctx, posts[i].ID, viewerID); err == nil {
-			posts[i].IsLiked = liked
+		liked, err := u.likeRepo.IsLikedByUser(ctx, posts[i].ID, viewerID)
+		if err != nil {
+			return nil, fmt.Errorf("PostUseCase - IsLikedByUser: %w", err)
 		}
+		posts[i].LikeCount, posts[i].IsLiked = count, liked
 	}
-	return posts
+	return posts, nil
 }
 
 func (u *UseCase) CreatePost(ctx context.Context, userID, userName, userAvatar string, req request.CreatePostRequest) (response.PostResponse, error) {
@@ -85,11 +88,17 @@ func (u *UseCase) ListPostsByUser(ctx context.Context, userID, viewerID string, 
 	}
 
 	pageRes := mapper.ToPostPageResponse(posts, total, page, limit)
-	pageRes.Data = u.withLikeInfo(ctx, pageRes.Data, viewerID)
+	pageRes.Data, err = u.withLikeInfo(ctx, pageRes.Data, viewerID)
+	if err != nil {
+		return response.PageResponse[response.PostResponse]{}, err
+	}
 	return pageRes, nil
 }
 
 func (u *UseCase) TogglePostLike(ctx context.Context, postID, userID string) (response.PostLikeResponse, error) {
+	if _, err := u.repo.GetByID(ctx, postID); err != nil {
+		return response.PostLikeResponse{}, err
+	}
 	liked, total, err := u.likeRepo.ToggleLike(ctx, postID, userID)
 	if err != nil {
 		return response.PostLikeResponse{}, fmt.Errorf("PostUseCase - TogglePostLike: %w", err)

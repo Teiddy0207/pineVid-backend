@@ -110,6 +110,9 @@ func (r *V1) togglePostLike(ctx *fiber.Ctx) error {
 	userID := getUserID(ctx)
 	resDTO, err := r.ps.TogglePostLike(ctx.UserContext(), postID, userID)
 	if err != nil {
+		if errors.Is(err, entity.ErrPostNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "post not found")
+		}
 		r.l.Error(err, "restapi - v1 - togglePostLike")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to toggle post like")
 	}

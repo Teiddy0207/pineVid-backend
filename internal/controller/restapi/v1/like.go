@@ -58,6 +58,12 @@ func (r *V1) heartStream(ctx *fiber.Ctx) error {
 	resDTO, err := r.lk.HeartStream(ctx.UserContext(), streamID, getUserID(ctx))
 	if err != nil {
 		r.l.Error(err, "restapi - v1 - heartStream")
+		if errors.Is(err, entity.ErrLivestreamNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "livestream not found")
+		}
+		if errors.Is(err, entity.ErrLivestreamNotLive) {
+			return errorResponse(ctx, http.StatusConflict, "livestream is not live")
+		}
 		if errors.Is(err, entity.ErrLiveEventsUnavailable) {
 			return errorResponse(ctx, http.StatusServiceUnavailable, "hearts are temporarily unavailable, please retry")
 		}

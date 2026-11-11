@@ -563,6 +563,13 @@ func (u *UseCase) SendChatMessage(ctx context.Context, streamID, userID, usernam
 	if utf8.RuneCountInString(text) > maxChatMessageRunes {
 		return response.ChatMessageResponse{}, entity.ErrChatMessageTooLong
 	}
+	room, err := u.repo.GetByID(ctx, streamID)
+	if err != nil {
+		return response.ChatMessageResponse{}, fmt.Errorf("SendChatMessage - GetByID: %w", err)
+	}
+	if !room.IsLive {
+		return response.ChatMessageResponse{}, entity.ErrLivestreamNotLive
+	}
 	if username == "" {
 		username = "Viewer"
 	}

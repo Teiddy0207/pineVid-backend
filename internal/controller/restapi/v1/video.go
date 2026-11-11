@@ -419,6 +419,15 @@ func (r *V1) publishVideo(ctx *fiber.Ctx) error {
 
 	resDTO, err := r.vd.PublishVideo(ctx.UserContext(), userID, id)
 	if err != nil {
+		if errors.Is(err, entity.ErrVideoNotReady) {
+			return errorResponse(ctx, http.StatusConflict, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoForbidden) {
+			return errorResponse(ctx, http.StatusForbidden, err.Error())
+		}
+		if errors.Is(err, entity.ErrVideoNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, err.Error())
+		}
 		r.l.Error(err, "restapi - v1 - publishVideo")
 		return errorResponse(ctx, http.StatusInternalServerError, "failed to publish video")
 	}

@@ -36,7 +36,10 @@ func (r *Repo) ToggleLike(ctx context.Context, postID, userID string) (bool, int
 	err = r.Pool.QueryRow(ctx, sql, args...).Scan(&existingID)
 	liked := false
 
-	if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, 0, fmt.Errorf("PostLikeRepo - ToggleLike - QueryRow: %w", err)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
 		insSql, insArgs, _ := r.Builder.
 			Insert("post_likes").
 			Columns("id", "post_id", "user_id", "created_at").

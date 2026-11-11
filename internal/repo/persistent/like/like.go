@@ -78,7 +78,7 @@ func (r *Repo) IncrementHeart(ctx context.Context, streamID string) (int64, erro
 		key := fmt.Sprintf("stream_hearts:%s", streamID)
 		return r.Redis.Client.Incr(ctx, key).Result()
 	}
-	return 1, nil
+	return 0, entity.ErrLiveEventsUnavailable
 }
 
 // GetLikeCount returns the durable like count for one video from Postgres.

@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	ErrLivestreamNotLive  = errors.New("livestream is not live")
 	ErrLivestreamNotFound = errors.New("livestream not found")
 	ErrInvalidStreamKey   = errors.New("invalid stream key")
 	ErrStreamBanned       = errors.New("this stream has been banned")

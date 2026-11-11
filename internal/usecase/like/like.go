@@ -46,6 +46,17 @@ func (u *UseCase) ToggleLikeVideo(ctx context.Context, userID, videoID string) (
 }
 
 func (u *UseCase) HeartStream(ctx context.Context, streamID, userID string) (response.HeartResponse, error) {
+	if u.livestreamUc == nil {
+		return response.HeartResponse{}, entity.ErrLiveEventsUnavailable
+	}
+	room, roomErr := u.livestreamUc.GetStreamByID(ctx, streamID)
+	if roomErr != nil {
+		return response.HeartResponse{}, fmt.Errorf("HeartStream - GetStreamByID: %w", roomErr)
+	}
+	if !room.IsLive {
+		return response.HeartResponse{}, entity.ErrLivestreamNotLive
+	}
+
 	var (
 		totalHearts int64
 		err         error

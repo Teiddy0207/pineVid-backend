@@ -33,8 +33,8 @@ func ApplyVideoUpdate(v *entity.Video, req request.UpdateVideo) {
 	if req.Title != "" {
 		v.Title = req.Title
 	}
-	if req.Description != "" {
-		v.Description = req.Description
+	if req.Description != nil {
+		v.Description = *req.Description
 	}
 	if req.Category != "" {
 		v.Category = req.Category
@@ -42,8 +42,8 @@ func ApplyVideoUpdate(v *entity.Video, req request.UpdateVideo) {
 	if req.Visibility != "" {
 		v.Visibility = entity.VideoVisibility(req.Visibility)
 	}
-	if req.ThumbnailURL != "" {
-		v.ThumbnailUrl = req.ThumbnailURL
+	if req.ThumbnailURL != nil {
+		v.ThumbnailUrl = *req.ThumbnailURL
 	}
 }
 

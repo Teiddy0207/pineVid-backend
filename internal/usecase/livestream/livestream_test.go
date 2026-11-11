@@ -137,7 +137,9 @@ func TestAuthenticateStreamKey_BanDuringGraceBlocksReconnect(t *testing.T) {
 func TestSendChatMessage_Validation(t *testing.T) {
 	t.Parallel()
 
-	uc := newLivestreamUseCase(new(MockLivestreamRepo))
+	roomRepo := new(MockLivestreamRepo)
+	roomRepo.On("GetByID", mock.Anything, "room").Return(entity.Livestream{IsLive: true}, nil)
+	uc := newLivestreamUseCase(roomRepo)
 
 	_, err := uc.SendChatMessage(context.Background(), "room", "u-alice", "alice", "", "   ")
 	assert.ErrorIs(t, err, entity.ErrEmptyChatMessage)
@@ -301,7 +303,9 @@ func TestSendChatMessage_AppendsToLiveEventsThenBroadcasts(t *testing.T) {
 
 	hub := events.NewChatHub()
 	log := &fakeLiveEvents{}
-	uc := livestream.New(new(MockLivestreamRepo), nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(log)
+	roomRepo := new(MockLivestreamRepo)
+	roomRepo.On("GetByID", mock.Anything, "room").Return(entity.Livestream{IsLive: true}, nil)
+	uc := livestream.New(roomRepo, nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(log)
 
 	ch, unsub := hub.Subscribe("room")
 	defer unsub()
@@ -330,7 +334,9 @@ func TestSendChatMessage_LogDown_FailsWithoutBroadcast(t *testing.T) {
 
 	hub := events.NewChatHub()
 	log := &fakeLiveEvents{appendErr: entity.ErrLiveEventsUnavailable}
-	uc := livestream.New(new(MockLivestreamRepo), nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(log)
+	roomRepo := new(MockLivestreamRepo)
+	roomRepo.On("GetByID", mock.Anything, "room").Return(entity.Livestream{IsLive: true}, nil)
+	uc := livestream.New(roomRepo, nil, nil, nil, nil, hub, nil, nil, nil, nil, "", "", testGrace).WithLiveEvents(log)
 
 	ch, unsub := hub.Subscribe("room")
 	defer unsub()
@@ -361,5 +367,28 @@ func TestSubscribeChat_SendsCurrentHeartTotalFirst(t *testing.T) {
 		assert.EqualValues(t, 7, msg.Value)
 	case <-time.After(time.Second):
 		t.Fatal("no initial heart total")
+	}
+}
+
+func TestSendChatMessageRejectsInactiveRoom(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		room entity.Livestream
+		err  error
+		want error
+	}{
+		{"offline", entity.Livestream{}, nil, entity.ErrLivestreamNotLive},
+		{"missing", entity.Livestream{}, entity.ErrLivestreamNotFound, entity.ErrLivestreamNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			roomRepo := new(MockLivestreamRepo)
+			roomRepo.On("GetByID", mock.Anything, "room").Return(tc.room, tc.err).Once()
+			log := &fakeLiveEvents{}
+			uc := newLivestreamUseCase(roomRepo).WithLiveEvents(log)
+			_, err := uc.SendChatMessage(context.Background(), "room", "user", "User", "", "hello")
+			require.ErrorIs(t, err, tc.want)
+			require.Empty(t, log.chats)
+			roomRepo.AssertExpectations(t)
+		})
 	}
 }

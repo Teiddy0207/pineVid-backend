@@ -96,6 +96,12 @@ func (r *V1) sendChatMessage(ctx *fiber.Ctx) error {
 
 	resDTO, err := r.ls.SendChatMessage(ctx.UserContext(), id, user.ID, user.Username, user.Avatar, req.Text)
 	if err != nil {
+		if errors.Is(err, entity.ErrLivestreamNotFound) {
+			return errorResponse(ctx, http.StatusNotFound, "livestream not found")
+		}
+		if errors.Is(err, entity.ErrLivestreamNotLive) {
+			return errorResponse(ctx, http.StatusConflict, "livestream is not live")
+		}
 		if errors.Is(err, entity.ErrEmptyChatMessage) || errors.Is(err, entity.ErrChatMessageTooLong) {
 			return errorResponse(ctx, http.StatusBadRequest, err.Error())
 		}

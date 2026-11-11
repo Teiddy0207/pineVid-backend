@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	ErrVideoNotReady          = errors.New("video is not ready to publish")
 	ErrVideoNotFound          = errors.New("video not found")
 	ErrUnsupportedVideoFormat = errors.New("unsupported video format: only .mp4, .mov, .mkv are allowed")
 	ErrUnsupportedImageFormat = errors.New("unsupported image format: only .jpg, .jpeg, .png, .webp, .gif are allowed")

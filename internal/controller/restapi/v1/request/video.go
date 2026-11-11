@@ -12,11 +12,11 @@ type CreateVideoUpload struct {
 }
 
 type UpdateVideo struct {
-	Title        string `json:"title" validate:"omitempty,min=3,max=255"`
-	Description  string `json:"description" validate:"omitempty,max=1000"`
-	Category     string `json:"category"`
-	Visibility   string `json:"visibility" validate:"omitempty,oneof=public private unlisted"`
-	ThumbnailURL string `json:"thumbnail_url"`
+	Title        string  `json:"title" validate:"omitempty,min=3,max=255"`
+	Description  *string `json:"description" validate:"omitempty,max=1000"`
+	Category     string  `json:"category"`
+	Visibility   string  `json:"visibility" validate:"omitempty,oneof=public private unlisted"`
+	ThumbnailURL *string `json:"thumbnail_url"`
 }
 
 type UpdateThumbnail struct {

@@ -27,7 +27,7 @@ type UseCase struct {
 	jobs      *transcodejob.Enqueuer
 	notifUc   usecase.Notification
 	viewPub   ViewPublisher
-	
+
 	ticketWaitDisabled bool
 
 	// uploadBaseURL is the object-store address the browser uploads to.
@@ -562,6 +562,10 @@ func (u *UseCase) PublishVideo(ctx context.Context, userID, videoID string) (res
 	}
 	if v.UserID != userID {
 		return response.VideoResponse{}, entity.ErrVideoForbidden
+	}
+
+	if v.Status != entity.VideoStatusComplete || v.HLSUrl == "" {
+		return response.VideoResponse{}, entity.ErrVideoNotReady
 	}
 
 	wasAlreadyPublic := v.Visibility == entity.VideoVisibilityPublic
