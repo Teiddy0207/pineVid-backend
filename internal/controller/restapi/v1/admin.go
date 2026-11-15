@@ -14,7 +14,7 @@ import (
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Success      200 {object} response.SystemDashboardResponse
 // @Failure      500 {object} response.Error
 // @Router       /v1/admin/dashboard [get]
@@ -36,7 +36,7 @@ func (r *V1) getAdminDashboard(ctx *fiber.Ctx) error {
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Success      200 {array} response.WorkerStatusResponse
 // @Failure      500 {object} response.Error
 // @Router       /v1/admin/workers [get]
@@ -58,7 +58,7 @@ func (r *V1) getAdminWorkers(ctx *fiber.Ctx) error {
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Param        id path string true "Livestream ID"
 // @Success      200 {object} map[string]interface{}
 // @Failure      500 {object} response.Error
@@ -81,7 +81,7 @@ func (r *V1) banStream(ctx *fiber.Ctx) error {
 // @Description  Allow a previously banned channel to go live again
 // @Tags         Admin
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Param        id path string true "Livestream ID"
 // @Success      200 {object} map[string]interface{}
 // @Failure      500 {object} response.Error
@@ -105,7 +105,7 @@ func (r *V1) unbanStream(ctx *fiber.Ctx) error {
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Param        id path string true "Video ID"
 // @Success      200 {object} map[string]interface{}
 // @Failure      500 {object} response.Error
@@ -163,7 +163,7 @@ func (r *V1) recordWorkerHeartbeat(ctx *fiber.Ctx) error {
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Param        page query int false "Page number" default(1)
 // @Param        limit query int false "Page limit" default(10)
 // @Success      200 {object} response.PageResponse[response.UserResponse]
@@ -190,7 +190,7 @@ func (r *V1) listAdminUsers(ctx *fiber.Ctx) error {
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Param        id path string true "User ID"
 // @Success      200 {object} map[string]interface{}
 // @Failure      500 {object} response.Error
@@ -214,7 +214,7 @@ func (r *V1) banUser(ctx *fiber.Ctx) error {
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Param        X-Internal-Token header string true "Admin API service credential"
 // @Param        id path string true "User ID"
 // @Success      200 {object} map[string]interface{}
 // @Failure      500 {object} response.Error

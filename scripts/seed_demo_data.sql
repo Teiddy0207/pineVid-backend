@@ -30,19 +30,19 @@
 
 BEGIN;
 
--- 0) Demo admin account (fixed credentials, idempotent) so the Admin
---    Dashboard (/v1/admin/*, gated by RequireAdmin) can be exercised without
---    hand-editing the database. Password: Admin@123456
+-- 0) Legacy demo uploader (normal user). Admin credentials live in the
+--    separate admins table owned by admin/api migrations/bootstrap.
+--    Password: Admin@123456
 INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'admin_demo',
   'admin@pipevid.dev',
   '$2a$10$YXjwOxii7dbRGJHe7yHv6uipXK1lQRONQxGIGRwr5HRvJTYNeEA7q',
-  'admin',
+  'user',
   now(), now()
 )
-ON CONFLICT (email) DO UPDATE SET role = 'admin';
+ON CONFLICT (email) DO NOTHING;
 
 -- Unique-per-run suffix so this script can be safely re-executed against the
 -- same database without hitting the users.username/email unique constraints.

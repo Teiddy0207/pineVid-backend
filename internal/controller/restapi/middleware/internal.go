@@ -30,3 +30,15 @@ func RequireInternalSecret(secret string) func(*fiber.Ctx) error {
 		return ctx.Next()
 	}
 }
+
+// RequireInternalHeader protects administration calls from the separate Admin API.
+// Unlike SRS hooks, administration never accepts a credential in a URL.
+func RequireInternalHeader(secret string) func(*fiber.Ctx) error {
+	return func(ctx *fiber.Ctx) error {
+		provided := ctx.Get(InternalTokenHeader)
+		if secret == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(secret)) != 1 {
+			return ctx.Status(http.StatusUnauthorized).JSON(errorResponse{Error: "invalid internal token"})
+		}
+		return ctx.Next()
+	}
+}

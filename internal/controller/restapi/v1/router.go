@@ -123,6 +123,19 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		livePublicGroup.Post("/dvr", internalOnly, r.handleDVRComplete)          // SRS on_dvr
 	}
 
+	// Register before the broad user Auth middleware: admin sessions live in Admin API.
+	adminGroup := apiV1Group.Group("/admin", middleware.RequireInternalHeader(internalSecret))
+	{
+		adminGroup.Get("/dashboard", r.getAdminDashboard)
+		adminGroup.Get("/workers", r.getAdminWorkers)
+		adminGroup.Post("/streams/:id/ban", r.banStream)
+		adminGroup.Post("/streams/:id/unban", r.unbanStream)
+		adminGroup.Post("/videos/:id/ban", r.banVideo)
+		adminGroup.Get("/users", r.listAdminUsers)
+		adminGroup.Post("/users/:id/ban", r.banUser)
+		adminGroup.Post("/users/:id/unban", r.unbanUser)
+	}
+
 	// Protected routes
 	protected := apiV1Group.Group("", auth)
 
@@ -172,15 +185,4 @@ func NewRoutes(apiV1Group fiber.Router, u usecase.User, vd usecase.Video, ls use
 		studioGroup.Post("/live/end", r.endStream)
 	}
 
-	adminGroup := protected.Group("/admin", middleware.RequireAdmin(r.u))
-	{
-		adminGroup.Get("/dashboard", r.getAdminDashboard)
-		adminGroup.Get("/workers", r.getAdminWorkers)
-		adminGroup.Post("/streams/:id/ban", r.banStream)
-		adminGroup.Post("/streams/:id/unban", r.unbanStream)
-		adminGroup.Post("/videos/:id/ban", r.banVideo)
-		adminGroup.Get("/users", r.listAdminUsers)
-		adminGroup.Post("/users/:id/ban", r.banUser)
-		adminGroup.Post("/users/:id/unban", r.unbanUser)
-	}
 }
