@@ -71,7 +71,7 @@ func NewPublisher() (*Publisher, error) {
 
 	// No fallback to another URL: silently connecting to whatever NATS
 	// listens on the default port could hand jobs to an unrelated server.
-	nc, err := nats.Connect(natsURL)
+	nc, err := nats.Connect(natsURL, ReconnectOptions("backend")...)
 	if err != nil {
 		return nil, fmt.Errorf("NATS Connect error: %w", err)
 	}
@@ -135,8 +135,39 @@ func (p *Publisher) PublishTranscodeJob(ctx context.Context, job TranscodeJob) e
 		return err
 	}
 
+	// Bound the wait for the stream's ack: while NATS is down the client
+	// buffers the publish and would otherwise hold the HTTP request open until
+	// the connection comes back (observed: 137 s). The caller turns the error
+	// into 503 and rolls the video back to a re-confirmable state.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, PublishTimeout)
+		defer cancel()
+	}
 	_, err = p.js.Publish(SubjectTranscode, data, nats.MsgId(job.JobID), nats.Context(ctx))
 	return err
+}
+
+// PublishTimeout bounds one transcode-job publish (see PublishTranscodeJob).
+const PublishTimeout = 5 * time.Second
+
+// ReconnectOptions keeps a connection alive across NATS restarts of any
+// length. The client default gives up after 60 attempts × 2 s, after which the
+// connection is closed for good and every publish fails until the process is
+// restarted (observed on the VPS: NATS stopped for 137 s → backend answered
+// 503 forever after NATS came back).
+func ReconnectOptions(name string) []nats.Option {
+	return []nats.Option{
+		nats.Name(name),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			log.Printf("WARN nats[%s]: disconnected: %v", name, err)
+		}),
+		nats.ReconnectHandler(func(c *nats.Conn) {
+			log.Printf("INFO nats[%s]: reconnected to %s", name, c.ConnectedUrlRedacted())
+		}),
+	}
 }
 
 // PublishViewUpdated announces a new view count on core NATS (not stored).

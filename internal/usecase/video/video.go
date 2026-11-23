@@ -39,6 +39,31 @@ type UseCase struct {
 
 	// publicBucket is the anonymously readable bucket for user-facing images.
 	publicBucket string
+
+	// media, when set, lets DeleteVideo remove the video's files too.
+	media        MediaRemover
+	mediaRaw     string
+	mediaHLS     string
+	mediaOnError func(error)
+}
+
+// MediaRemover deletes object-store files (pkg/minio.Client).
+type MediaRemover interface {
+	RemovePrefix(ctx context.Context, bucket, prefix string) (int, error)
+	RemoveObject(ctx context.Context, bucket, key string) error
+}
+
+// mediaRemoveTimeout bounds the file cleanup done inside DELETE /studio/videos/:id.
+const mediaRemoveTimeout = 30 * time.Second
+
+// WithMediaRemover makes DeleteVideo also delete the raw upload (rawBucket)
+// and the HLS output (hlsBucket, prefix videos/<id>/). onError receives
+// cleanup failures: the video row is already gone by then, so the request
+// still succeeds and the leftover files are only reported (they are no longer
+// reachable: signed HLS links are only issued for existing, viewable videos).
+func (u *UseCase) WithMediaRemover(m MediaRemover, rawBucket, hlsBucket string, onError func(error)) *UseCase {
+	u.media, u.mediaRaw, u.mediaHLS, u.mediaOnError = m, rawBucket, hlsBucket, onError
+	return u
 }
 
 // UploadSigner issues presigned PUT URLs for the raw-videos bucket.
@@ -670,7 +695,33 @@ func (u *UseCase) DeleteVideo(ctx context.Context, userID, videoID string) error
 	if v.UserID != userID {
 		return entity.ErrVideoForbidden
 	}
-	return u.repo.Delete(ctx, videoID)
+	if err := u.repo.Delete(ctx, videoID); err != nil {
+		return err
+	}
+	u.removeMedia(ctx, v)
+	return nil
+}
+
+// removeMedia deletes the files of a video whose row was just deleted. It runs
+// in the request (bounded by mediaRemoveTimeout) so the response tells the
+// truth about the files in the common case; failures go to mediaOnError.
+func (u *UseCase) removeMedia(ctx context.Context, v entity.Video) {
+	if u.media == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mediaRemoveTimeout)
+	defer cancel()
+	report := func(err error) {
+		if err != nil && u.mediaOnError != nil {
+			u.mediaOnError(fmt.Errorf("VideoUseCase - DeleteVideo - remove media of %s: %w", v.ID, err))
+		}
+	}
+	if _, err := u.media.RemovePrefix(ctx, u.mediaHLS, "videos/"+v.ID+"/"); err != nil {
+		report(err)
+	}
+	if v.RawS3Key != "" {
+		report(u.media.RemoveObject(ctx, u.mediaRaw, v.RawS3Key))
+	}
 }
 
 // HandleTranscodeEvent applies one transcode event (webhook or DLQ) exactly

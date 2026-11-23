@@ -257,9 +257,18 @@ func (r *Repo) GetTrendingVideoIDs(ctx context.Context, days, limit int) ([]stri
 // while it writes them to Postgres (worker/module/view_sync.go).
 const viewSyncInflightKey = "view_sync:inflight"
 
+// viewSyncInflightBatchKey holds the ID of the in-flight batch.
+const viewSyncInflightBatchKey = "view_sync:inflight_batch"
+
 // GetPendingViewsForVideo returns views recorded in Redis but not yet synced
 // to videos.views — including any the worker has claimed but not committed,
 // so the displayed total never dips during a sync.
+//
+// A claimed batch that Postgres already committed (view_sync_batches has its
+// ID) but that is still in Redis — the worker died between COMMIT and the
+// Redis DEL, or is about to DEL — is already inside videos.views and must not
+// be added again. Measured before this check (bench F6, 23/11/2026): the API
+// showed +50 for a 50-view batch until the next sync run.
 func (r *Repo) GetPendingViewsForVideo(ctx context.Context, videoID string) int64 {
 	if r.Redis == nil || r.Redis.Client == nil {
 		return 0
@@ -267,11 +276,28 @@ func (r *Repo) GetPendingViewsForVideo(ctx context.Context, videoID string) int6
 	pipe := r.Redis.Client.Pipeline()
 	counter := pipe.Get(ctx, fmt.Sprintf("video_views:%s", videoID))
 	inflight := pipe.HGet(ctx, viewSyncInflightKey, videoID)
+	batch := pipe.Get(ctx, viewSyncInflightBatchKey)
 	_, _ = pipe.Exec(ctx)
 
 	a, _ := strconv.ParseInt(counter.Val(), 10, 64)
 	b, _ := strconv.ParseInt(inflight.Val(), 10, 64)
+	if b > 0 && batch.Val() != "" && r.batchCommitted(ctx, batch.Val()) {
+		b = 0
+	}
 	return a + b
+}
+
+// batchCommitted reports whether view-sync already applied batchID. On a DB
+// error it answers false: briefly over-counting is preferred to dropping views.
+func (r *Repo) batchCommitted(ctx context.Context, batchID string) bool {
+	if r.Pool == nil {
+		return false
+	}
+	var ok bool
+	if err := r.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM view_sync_batches WHERE batch_id = $1)`, batchID).Scan(&ok); err != nil {
+		return false
+	}
+	return ok
 }
 
 // recordViewFallback increments views directly in Postgres if Redis is disabled

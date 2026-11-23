@@ -16,6 +16,7 @@ import (
 	natsrpc "github.com/evrone/go-clean-template/internal/controller/nats_rpc"
 	"github.com/evrone/go-clean-template/internal/controller/natsjobs"
 	"github.com/evrone/go-clean-template/internal/controller/restapi"
+	"github.com/evrone/go-clean-template/internal/entity"
 	"github.com/evrone/go-clean-template/internal/events"
 	persistAdminStatsRepo "github.com/evrone/go-clean-template/internal/repo/persistent/adminstats"
 	persistChatMsgRepo "github.com/evrone/go-clean-template/internal/repo/persistent/chatmessage"
@@ -60,6 +61,7 @@ import (
 	videousecase "github.com/evrone/go-clean-template/internal/usecase/video"
 	vocabusecase "github.com/evrone/go-clean-template/internal/usecase/vocabulary"
 	"github.com/evrone/go-clean-template/pkg/grpcserver"
+	"github.com/evrone/go-clean-template/pkg/hlslink"
 	"github.com/evrone/go-clean-template/pkg/httpserver"
 	"github.com/evrone/go-clean-template/pkg/jwt"
 	"github.com/evrone/go-clean-template/pkg/logger"
@@ -179,6 +181,13 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 	if cfg.Benchmark.Mode {
 		videoUc.DisableTicketWait()
 	}
+	if minioClient != nil {
+		videoUc.WithMediaRemover(minioClient, cfg.Minio.RawBucket, cfg.Minio.HLSBucket, func(err error) { l.Error(err) })
+	}
+	if cfg.Minio.HLSLinkSecret != "" {
+		entity.SetHLSLinkSigner(hlslink.New(cfg.Minio.HLSLinkSecret, cfg.Minio.HLSLinkTTL).Sign)
+		l.Info("HLS_LINK_SECRET: VOD hls_url values are signed, expiring /s/... links (ttl %s)", cfg.Minio.HLSLinkTTL)
+	}
 	if natsPub != nil {
 		videoUc.WithViewPublisher(natsPub)
 	}
@@ -200,6 +209,25 @@ func initUseCases(cfg *config.Config, pg *postgres.Postgres, jwtManager *jwt.Man
 		livestreamUc.WithLiveEvents(liveEventLog)
 	}
 	livestreamUc.StartReconciliationLoop(context.Background(), cfg.SRS.ReconcileInterval)
+	if cfg.TranscodeSync.Mode != "sync" {
+		// Jobs marked queued but never confirmed published (API died between
+		// the DB write and the NATS publish) are republished with the same
+		// job_id; see transcodejob.RepublishUnpublished.
+		go func() {
+			t := time.NewTicker(unpublishedJobScan)
+			defer t.Stop()
+			for range t.C {
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				n, err := jobs.RepublishUnpublished(ctx, unpublishedJobAge)
+				cancel()
+				if err != nil {
+					l.Error(err)
+				} else if n > 0 {
+					l.Warn("transcode reconcile: republished %d job(s) that were queued but never published", n)
+				}
+			}
+		}()
+	}
 	workerRepo := persistWorkerRepo.New(pg)
 	adminStatsRepo := persistAdminStatsRepo.New(pg)
 	userUc := user.New(userRepo, refreshTokenRepo, jwtManager, cfg.JWT.RefreshTokenExpiry)
@@ -393,3 +421,12 @@ func Run(cfg *config.Config) {
 	s.startServers()
 	s.waitForShutdown(l)
 }
+
+// unpublishedJobScan / unpublishedJobAge: how often the backend looks for
+// queued-but-never-published transcode jobs, and how old one must be. Both are
+// well inside nats.DuplicateWindow (2 min), so republishing a job that was in
+// fact published is dropped by JetStream as a duplicate.
+const (
+	unpublishedJobScan = 15 * time.Second
+	unpublishedJobAge  = 30 * time.Second
+)

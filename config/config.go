@@ -131,6 +131,14 @@ type (
 		// internet (the bucket then stays private); the default keeps the dev
 		// stack's anonymous-upload behaviour.
 		PresignUploads bool `env:"MINIO_PRESIGN_UPLOADS" envDefault:"false"`
+		// HLSBucket holds the transcoded VOD output (videos/<id>/...).
+		HLSBucket string `env:"MINIO_HLS_BUCKET" envDefault:"hls-streams"`
+		// HLSLinkSecret, when set, makes every hls_url the API returns an
+		// expiring signed path (/s/<token>/<exp>/<id>/...) that nginx checks
+		// with secure_link; nginx must then refuse direct /hls-streams/ reads.
+		// Must equal the secret in the nginx config. Empty = old behaviour.
+		HLSLinkSecret string        `env:"HLS_LINK_SECRET"`
+		HLSLinkTTL    time.Duration `env:"HLS_LINK_TTL" envDefault:"6h"`
 	}
 
 	// DVR -. Local filesystem path where SRS writes livestream recordings

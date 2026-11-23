@@ -354,7 +354,7 @@ func (r *V1) broadcastTranscodeStatus(ownerID string, ev entity.TranscodeEvent) 
 		UserID:  ownerID,
 		VideoID: ev.VideoID,
 		Status:  string(status),
-		HLSUrl:  ev.HLSMasterURL,
+		HLSUrl:  entity.SignHLSLink(ev.HLSMasterURL),
 	})
 }
 

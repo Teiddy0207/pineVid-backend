@@ -28,6 +28,37 @@ func New(endpoint, accessKey, secretKey string, useSSL bool) (*Client, error) {
 	return &Client{mc: mc}, nil
 }
 
+// RemovePrefix deletes every object under bucket/prefix and reports how many
+// were removed. A missing bucket or an empty prefix match is not an error.
+func (c *Client) RemovePrefix(ctx context.Context, bucket, prefix string) (int, error) {
+	objs := c.mc.ListObjects(ctx, bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true})
+	n := 0
+	for o := range objs {
+		if o.Err != nil {
+			if minio.ToErrorResponse(o.Err).Code == "NoSuchBucket" {
+				return n, nil
+			}
+			return n, fmt.Errorf("MinioClient - RemovePrefix - ListObjects: %w", o.Err)
+		}
+		if err := c.mc.RemoveObject(ctx, bucket, o.Key, minio.RemoveObjectOptions{}); err != nil {
+			return n, fmt.Errorf("MinioClient - RemovePrefix - RemoveObject %s: %w", o.Key, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
+// RemoveObject deletes one object; deleting a missing object is not an error.
+func (c *Client) RemoveObject(ctx context.Context, bucket, key string) error {
+	if err := c.mc.RemoveObject(ctx, bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		if code := minio.ToErrorResponse(err).Code; code == "NoSuchBucket" || code == "NoSuchKey" {
+			return nil
+		}
+		return fmt.Errorf("MinioClient - RemoveObject: %w", err)
+	}
+	return nil
+}
+
 // UploadFile streams localPath's contents into bucket/objectKey, creating the
 // bucket first if it doesn't already exist.
 func (c *Client) UploadFile(ctx context.Context, bucket, objectKey, localPath string) error {

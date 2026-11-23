@@ -73,7 +73,7 @@ func ToVideoResponse(v entity.Video) response.VideoResponse {
 		Category:     v.Category,
 		Status:       string(v.Status),
 		Visibility:   string(v.Visibility),
-		HLSUrl:       v.HLSUrl,
+		HLSUrl:       entity.SignHLSLink(v.HLSUrl),
 		ThumbnailUrl: v.ThumbnailUrl,
 		Duration:     v.Duration,
 		IsReel:       v.IsReel,

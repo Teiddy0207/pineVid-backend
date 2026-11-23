@@ -281,6 +281,7 @@ func (r *Repo) MarkQueued(ctx context.Context, id, jobID string, from entity.Vid
 		Set("status", entity.VideoStatusProcessing).
 		Set("current_job_id", jobID).
 		Set("queued_at", at).
+		Set("job_published_at", nil).
 		Set("transcode_started_at", nil).
 		Set("transcode_completed_at", nil).
 		Set("updated_at", at).
@@ -296,6 +297,60 @@ func (r *Repo) MarkQueued(ctx context.Context, id, jobID string, from entity.Vid
 	}
 
 	return tag.RowsAffected() > 0, nil
+}
+
+// MarkPublished records that JetStream stored jobID for the video (only if it
+// is still the video's current job).
+func (r *Repo) MarkPublished(ctx context.Context, id, jobID string, at time.Time) error {
+	sql, args, err := r.Builder.
+		Update("videos").
+		Set("job_published_at", at).
+		Where(sq.Eq{"id": id, "current_job_id": jobID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("VideoRepo - MarkPublished - r.Builder: %w", err)
+	}
+	if _, err := r.Pool.Exec(ctx, sql, args...); err != nil {
+		return fmt.Errorf("VideoRepo - MarkPublished - Exec: %w", err)
+	}
+	return nil
+}
+
+// ListUnpublishedJobs returns videos whose current job was marked queued
+// before `before` but never confirmed published and never started: the API
+// died between MarkQueued and the publish. Only ID, CurrentJobID, RawS3Key
+// and QueuedAt are filled.
+func (r *Repo) ListUnpublishedJobs(ctx context.Context, before time.Time, limit int) ([]entity.Video, error) {
+	sql, args, err := r.Builder.
+		Select("id", "current_job_id", "COALESCE(raw_s3_key, '')", "queued_at").
+		From("videos").
+		Where(sq.Eq{"status": entity.VideoStatusProcessing}).
+		Where("current_job_id IS NOT NULL").
+		Where("job_published_at IS NULL").
+		Where("transcode_started_at IS NULL").
+		Where(sq.Lt{"queued_at": before}).
+		OrderBy("queued_at").
+		Limit(uint64(limit)).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("VideoRepo - ListUnpublishedJobs - r.Builder: %w", err)
+	}
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("VideoRepo - ListUnpublishedJobs - Query: %w", err)
+	}
+	defer rows.Close()
+	var out []entity.Video
+	for rows.Next() {
+		var v entity.Video
+		var q time.Time
+		if err := rows.Scan(&v.ID, &v.CurrentJobID, &v.RawS3Key, &q); err != nil {
+			return nil, fmt.Errorf("VideoRepo - ListUnpublishedJobs - Scan: %w", err)
+		}
+		v.QueuedAt = &q
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 // RevertQueued undoes MarkQueued when the job could not be published, as long

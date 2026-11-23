@@ -7,6 +7,7 @@ package transcodejob
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/evrone/go-clean-template/internal/entity"
@@ -70,12 +71,78 @@ func (e *Enqueuer) Enqueue(ctx context.Context, videoID, sourceKey string, from 
 		Renditions:    e.renditions,
 		CreatedAt:     now,
 	}
+	faultPoint("after_mark_queued") // test-only: job marked queued, never published
 	if err := e.pub.PublishTranscodeJob(ctx, job); err != nil {
 		if rbErr := e.repo.RevertQueued(ctx, videoID, jobID, from, e.now()); rbErr != nil {
 			return "", false, fmt.Errorf("%w (publish: %v; rollback: %v)", ErrQueueUnavailable, err, rbErr)
 		}
 		return "", false, fmt.Errorf("%w (publish: %v)", ErrQueueUnavailable, err)
 	}
+	faultPoint("after_publish") // test-only: published, the client never gets the answer
+	e.markPublished(ctx, videoID, jobID)
 
 	return jobID, true, nil
+}
+
+// PublishTracker is implemented by the Postgres video repo. It closes the gap
+// between MarkQueued (a DB write) and the NATS publish, which are not one
+// transaction: if the API dies in between, the video sits in processing with
+// a job nobody will ever receive. Mocks need not implement it.
+type PublishTracker interface {
+	MarkPublished(ctx context.Context, id, jobID string, at time.Time) error
+	ListUnpublishedJobs(ctx context.Context, before time.Time, limit int) ([]entity.Video, error)
+}
+
+func (e *Enqueuer) markPublished(ctx context.Context, videoID, jobID string) {
+	if t, ok := e.repo.(PublishTracker); ok {
+		// A failure here only means the reconcile loop republishes the same
+		// job later; JetStream drops it as a duplicate (same Nats-Msg-Id).
+		_ = t.MarkPublished(ctx, videoID, jobID, e.now())
+	}
+}
+
+// RepublishUnpublished republishes, with the SAME job_id (and so the same
+// Nats-Msg-Id), every job marked queued more than olderThan ago that was never
+// confirmed published. If it was in fact published, JetStream drops the copy
+// inside the duplicate window, and after it a second delivery only produces
+// webhooks that are already-applied no-ops. Returns how many were republished.
+func (e *Enqueuer) RepublishUnpublished(ctx context.Context, olderThan time.Duration) (int, error) {
+	t, ok := e.repo.(PublishTracker)
+	if !ok || e.pub == nil {
+		return 0, nil
+	}
+	stuck, err := t.ListUnpublishedJobs(ctx, e.now().Add(-olderThan), 100)
+	if err != nil {
+		return 0, fmt.Errorf("transcodejob - RepublishUnpublished - list: %w", err)
+	}
+	n := 0
+	for _, v := range stuck {
+		created := e.now()
+		if v.QueuedAt != nil {
+			created = *v.QueuedAt
+		}
+		job := nats.TranscodeJob{
+			SchemaVersion: entity.TranscodeSchemaVersion,
+			JobID:         v.CurrentJobID,
+			VideoID:       v.ID,
+			SourceKey:     v.RawS3Key,
+			Renditions:    e.renditions,
+			CreatedAt:     created,
+		}
+		if err := e.pub.PublishTranscodeJob(ctx, job); err != nil {
+			return n, fmt.Errorf("transcodejob - RepublishUnpublished - publish %s: %w", v.CurrentJobID, err)
+		}
+		_ = t.MarkPublished(ctx, v.ID, v.CurrentJobID, e.now())
+		n++
+	}
+	return n, nil
+}
+
+// faultPoint exits the process with code 3 when TRANSCODE_ENQUEUE_FAULT names
+// this point. Test-only (bench/scripts/enqueue_gap_docker.sh); unset in prod.
+func faultPoint(name string) {
+	if os.Getenv("TRANSCODE_ENQUEUE_FAULT") == name {
+		fmt.Fprintf(os.Stderr, "TRANSCODE_ENQUEUE_FAULT=%s: exiting\n", name)
+		os.Exit(3)
+	}
 }
